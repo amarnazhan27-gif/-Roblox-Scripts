@@ -1,5 +1,5 @@
 -- ==========================================================
--- INDO HANGOUT ALL-IN-ONE AUTO-FISH (BLIND MACRO)
+-- INDO HANGOUT ALL-IN-ONE AUTO-FISH (FIXED SAFE ZONE CLICK)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -22,7 +22,7 @@ gui.Parent = game:GetService("CoreGui")
 
 local main = Instance.new("Frame", gui)
 main.Size = UDim2.new(0, 200, 0, 100)
-main.Position = UDim2.new(1, -210, 0, 50) 
+main.Position = UDim2.new(1, -210, 0, 150) 
 main.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 main.BorderSizePixel = 2
 main.BorderColor3 = Color3.fromRGB(0, 255, 150)
@@ -32,7 +32,7 @@ main.Draggable = true
 local title = Instance.new("TextLabel", main)
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundTransparency = 1
-title.Text = "AUTO FISH v2 (BLIND)"
+title.Text = "AUTO FISH v3 (SAFE CLICK)"
 title.TextColor3 = Color3.fromRGB(0, 255, 150)
 title.Font = Enum.Font.Code
 title.TextScaled = true
@@ -57,7 +57,7 @@ button.MouseButton1Click:Connect(function()
             isSpacePressed = false
         end
     else
-        lastCastTime = tick() -- Reset waktu saat dinyalakan
+        lastCastTime = tick()
     end
 end)
 
@@ -81,13 +81,22 @@ local function getFishingElements()
 end
 
 -- ==========================================
--- 3. SIMULASI KETUK LAYAR (LEMPAR PANCING)
+-- 3. AMAN DARI UI: SIMULASI KETUK AREA SUNGAI (KIRI)
 -- ==========================================
 local function blindClick()
-    -- Simulasi ketukan di tengah layar HP untuk memicu item alat pancing (harus di-equip manual)
-    VirtualInputManager:SendMouseButtonEvent(500, 500, 0, true, game)
-    task.wait(0.1)
-    VirtualInputManager:SendMouseButtonEvent(500, 500, 0, false, game)
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+    
+    -- Menggunakan persentase layar agar akurat di HP ukuran apapun
+    -- X = 25% dari kiri layar (Area sungai yang kosong)
+    -- Y = 50% dari atas layar (Tengah-tengah vertikal, menghindari analog jalan)
+    local safeX = camera.ViewportSize.X * 0.25
+    local safeY = camera.ViewportSize.Y * 0.5
+
+    -- Eksekusi ketukan di zona aman
+    VirtualInputManager:SendMouseButtonEvent(safeX, safeY, 0, true, game)
+    task.wait(0.05)
+    VirtualInputManager:SendMouseButtonEvent(safeX, safeY, 0, false, game)
 end
 
 -- ==========================================
@@ -98,7 +107,7 @@ RunService.Heartbeat:Connect(function()
 
     local white, red = getFishingElements()
 
-    -- Kondisi A: Minigame Muncul (Fokus menangkan ikan)
+    -- Kondisi A: Minigame Muncul
     if white and red and white.Visible then
         local whiteCenter = white.AbsolutePosition.X + (white.AbsoluteSize.X / 2)
         local redCenter = red.AbsolutePosition.X + (red.AbsoluteSize.X / 2)
@@ -116,18 +125,16 @@ RunService.Heartbeat:Connect(function()
             end
         end
         
-        -- Perbarui waktu agar tidak melempar ulang saat minigame sedang berjalan
         lastCastTime = tick() 
 
-    -- Kondisi B: Standby / Minigame Hilang (Umpan belum dilempar atau ikan lepas/tertangkap)
+    -- Kondisi B: Standby / Selesai Memancing
     else
         if isSpacePressed then
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
             isSpacePressed = false
-            lastCastTime = tick() + 2 -- Beri jeda 2 detik setelah menangkap sebelum lempar lagi
+            lastCastTime = tick() + 2 -- Jeda pasca tangkap
         end
 
-        -- Jalankan pengetukan otomatis berkala jika sudah melewati batas cooldown
         if tick() - lastCastTime > castCooldown then
             blindClick()
             lastCastTime = tick()
