@@ -1,3 +1,4 @@
+
 -- ==========================================================
 -- INDO HANGOUT AUTO-FISH (ANDROID/DELTA - FIXED)
 -- ==========================================================
@@ -162,7 +163,7 @@ task.spawn(function()
             -- Jika tidak pegang apa-apa, ambil dari backpack
             if not toolInHand and rodInBackpack and humanoid then
                 humanoid:EquipTool(rodInBackpack)
-                task.wait(0.5)
+                task.wait(1) -- Beri waktu lebih agar rod benar-benar aktif
                 toolInHand = char:FindFirstChildWhichIsA("Tool")
             end
 
@@ -174,15 +175,19 @@ task.spawn(function()
                     
                     pcall(function()
                         -- LANGKAH 3: MELEMPAR UMPAN
-                        -- Gunakan kombinasi Activate + Virtual Click untuk kepastian di Android
-                        toolInHand:Activate()
-                        
-                        -- Simulasi klik di tengah layar untuk memicu casting
-                        local x = workspace.CurrentCamera.ViewportSize.X / 2
-                        local y = workspace.CurrentCamera.ViewportSize.Y / 2
-                        VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
-                        task.wait(0.05)
-                        VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+                        -- Melakukan klik dua kali dengan jeda tekan (hold) untuk kepastian
+                        for i = 1, 2 do
+                            toolInHand:Activate()
+                            
+                            local x = workspace.CurrentCamera.ViewportSize.X / 2
+                            local y = workspace.CurrentCamera.ViewportSize.Y / 2
+                            
+                            VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+                            task.wait(0.2) -- Tahan sedikit agar terbaca oleh mesin game
+                            VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+                            
+                            task.wait(0.3) -- Jeda antar klik
+                        end
                     end)
                 end
             end
