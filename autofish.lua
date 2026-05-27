@@ -173,42 +173,32 @@ task.spawn(function()
                     lastCastTime = os.time()
                     
                     pcall(function()
-                        warn(">>> [AUTO FISH] MENEMBAK SINYAL AKTIVASI (ULTIMATE FIX)...")
-                        
-                        -- 1. Paksa script lokal pancingan untuk bekerja (Bypass Manual Click)
-                        if firesignal then
-                            firesignal(toolInHand.Activated)
-                        end
-                        
-                        -- 2. Backup Remote & Activate
                         local rodRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Rod", true) 
+                        
                         if rodRemote then
+                            -- Sinyal satu kali agar server tahu kita melempar (Pola asli game)
                             rodRemote:FireServer("Equipped", nil, toolInHand)
                             task.wait(0.2)
                             rodRemote:FireServer("Throw", nil, toolInHand)
                         end
+                        
+                        -- Memicu animasi lemparan secara lokal
                         toolInHand:Activate()
 
-                        -- 3. Terakhir Klik Fisik
+                        -- Simulasi klik fisik sebagai pelengkap
                         local x = workspace.CurrentCamera.ViewportSize.X / 2
                         local y = workspace.CurrentCamera.ViewportSize.Y * 0.35 
                         if mouse1click then
                             mouse1click()
-                        elseif mouse1press then
-                            mouse1press()
-                            task.wait(0.1)
-                            mouse1release()
                         else
                             VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
                             task.wait(0.1)
                             VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
                         end
-                        warn(">>> [AUTO FISH] Semua metode lempar telah dicoba!")
                     end)
                 end
-            elseif fishingState == "WAITING" and (os.time() - lastCastTime) >= 5 then
-                -- RECOVERY CEPAT: Jika 5 detik umpan tidak muncul, langsung IDLE lagi
-                -- agar bisa mencoba melempar ulang tanpa nunggu lama.
+            elseif fishingState == "WAITING" and (os.time() - lastCastTime) >= 20 then
+                -- Balik ke 20 detik agar tidak membatalkan pancingan yang sedang berjalan
                 fishingState = "IDLE"
             end
         end
