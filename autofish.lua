@@ -1,109 +1,123 @@
+-- ==========================================================
+-- INDO HANGOUT ULTIMATE AUTO-FISH (SAFE & HUMANIZED MODE)
+-- ==========================================================
 
---// INDO HANGOUT AUTO FISH (SUPER LIGHTWEIGHT VERSION)
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
+local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
-local lastCastTime = 0
-local isSpacePressed = false
+
+local rodEvent = ReplicatedStorage:WaitForChild("Events"):WaitForChild("RemoteEvent"):WaitForChild("Rod")
 
 -- ==========================================
--- GUI SUPER SEDERHANA & ENTENG (HANYA TOMBOL)
+-- 1. SISTEM ANTI-AFK (Bisa Ditinggal Tidur)
+-- ==========================================
+player.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    task.wait(math.random(5, 15) / 10) -- Jeda acak
+    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+end)
+
+-- ==========================================
+-- 2. MATIKAN ANIMASI KAMERA (Aman karena fitur bawaan game)
+-- ==========================================
+player:SetAttribute("DisableFishingAnimation", true)
+
+-- ==========================================
+-- 3. GUI KONTROL SUPER RINGAN & DRAGGABLE (NAMA ACAK)
 -- ==========================================
 local gui = Instance.new("ScreenGui")
-gui.Name = "AutoFish_Simple"
+-- Nama GUI diacak agar tidak terdeteksi oleh Anti-Cheat yang mencari nama spesifik
+gui.Name = HttpService:GenerateGUID(false) 
+gui.ResetOnSpawn = false
 gui.Parent = game:GetService("CoreGui")
 
-local button = Instance.new("TextButton", gui)
-button.Size = UDim2.new(0, 120, 0, 50)
-button.Position = UDim2.new(0.5, -60, 0.85, 0) -- Posisi di tengah bawah layar
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 150, 0, 70)
+frame.Position = UDim2.new(0.5, -75, 0.8, 0)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+frame.BorderSizePixel = 2
+frame.BorderColor3 = Color3.fromRGB(200, 200, 200)
+frame.Active = true
+frame.Draggable = true
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, 0, 0, 20)
+title.BackgroundTransparency = 1
+title.Text = "AUTO FISH (SAFE)"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.Code
+title.TextSize = 14
+
+local button = Instance.new("TextButton", frame)
+button.Size = UDim2.new(0, 130, 0, 35)
+button.Position = UDim2.new(0.5, -65, 0, 25)
 button.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 button.Text = "OFF"
+button.Font = Enum.Font.GothamBold
 button.TextScaled = true
 button.TextColor3 = Color3.new(1, 1, 1)
 
-local enabled = false
-
-local function setJumpState(canJump)
-    pcall(function()
-        local char = player.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, canJump) end
-    end)
-end
+local autoFishEnabled = false
+local isReeling = false -- Penanda agar skrip tidak spam klik saat sedang narik ikan
 
 button.MouseButton1Click:Connect(function()
-    enabled = not enabled
-    button.Text = enabled and "ON" or "OFF"
-    button.BackgroundColor3 = enabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
-    setJumpState(not enabled)
-    if not enabled and isSpacePressed and keyrelease then
-        keyrelease(0x20)
-        isSpacePressed = false
+    autoFishEnabled = not autoFishEnabled
+    button.Text = autoFishEnabled and "ON (FISHING...)" or "OFF"
+    button.BackgroundColor3 = autoFishEnabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
+end)
+
+-- ==========================================
+-- 4. SIMULASI MINIGAME (HUMANIZED CATCH)
+-- ==========================================
+rodEvent.OnClientEvent:Connect(function(action, rodName)
+    if autoFishEnabled and action == "StartReeling" then
+        isReeling = true
+        
+        -- Waktu reaksi manusia (0.5 sampai 1.2 detik)
+        local reactionTime = math.random(5, 12) / 10 
+        -- Waktu pura-pura main minigame (2.5 sampai 4.5 detik)
+        local playTime = math.random(25, 45) / 10 
+        
+        -- Tunggu total waktu yang natural sebelum menangkap
+        task.wait(reactionTime + playTime)
+        
+        -- Gunakan pcall (Protected Call) agar jika server ngelag, skrip tidak error
+        pcall(function()
+            rodEvent:FireServer("Catch", true, rodName)
+        end)
+        
+        -- Tutup GUI minigame secara paksa tapi dengan delay natural
+        task.wait(0.5)
+        local playerGui = player:FindFirstChild("PlayerGui")
+        if playerGui then
+            for _, v in pairs(playerGui:GetChildren()) do
+                if v:FindFirstChild("MainFrame") and v.MainFrame:FindFirstChild("Frame") then
+                    v.Enabled = false
+                end
+            end
+        end
+        
+        isReeling = false
     end
 end)
 
 -- ==========================================
--- CORE FUNCTION (LOGIKA PANCING & TRACKING)
+-- 5. AUTO CAST DENGAN JEDA ACAK
 -- ==========================================
-local function getFishingElements()
-    local playerGui = player:FindFirstChild("PlayerGui")
-    if not playerGui then return nil, nil end
-    for _, v in pairs(playerGui:GetDescendants()) do
-        if v.Name == "WhiteBar" and v:IsA("GuiObject") then
-            local red = v.Parent:FindFirstChild("RedBar")
-            if red and red:IsA("GuiObject") then return v, red end
-        end
-    end
-    return nil, nil
-end
-
-local function getFishingRod()
-    local char = player.Character
-    local tool = char and char:FindFirstChildOfClass("Tool")
-    if tool and string.find(string.lower(tool.Name), "rod") then return tool end
-    local backpack = player:FindFirstChild("Backpack")
-    if backpack then
-        for _, item in pairs(backpack:GetChildren()) do
-            if item:IsA("Tool") and string.find(string.lower(item.Name), "rod") then return item end
-        end
-    end
-    return nil
-end
-
-RunService.Heartbeat:Connect(function()
-    if not enabled then return end
-    setJumpState(false)
-    pcall(function()
-        local white, red = getFishingElements()
-        if not white or not red or not white.Visible then
-            if isSpacePressed and keyrelease then keyrelease(0x20) isSpacePressed = false end
-            return
-        end
-        local whiteCenter = white.AbsolutePosition.X + (white.AbsoluteSize.X / 2)
-        local redCenter = red.AbsolutePosition.X + (red.AbsoluteSize.X / 2)
-        local tolerance = white.AbsoluteSize.X * 0.1
-        if whiteCenter < (redCenter - tolerance) then
-            if not isSpacePressed and keypress then keypress(0x20) isSpacePressed = true end
-        elseif whiteCenter > (redCenter + tolerance) then
-            if isSpacePressed and keyrelease then keyrelease(0x20) isSpacePressed = false end
-        end
-    end)
-end)
-
 task.spawn(function()
-    while task.wait(0.5) do
-        if enabled then
-            local white, red = getFishingElements()
-            if (white and red and white.Visible) then lastCastTime = tick() else
-                if tick() - lastCastTime > 2.5 then
+    while true do
+        -- Jeda acak antara 1.5 detik sampai 3.5 detik untuk setiap lemparan
+        task.wait(math.random(15, 35) / 10) 
+        
+        if autoFishEnabled and not isReeling then
+            local char = player.Character
+            if char then
+                local tool = char:FindFirstChildOfClass("Tool")
+                if tool then
                     pcall(function()
-                        local rod = getFishingRod()
-                        if rod then
-                            if rod.Parent ~= player.Character then player.Character.Humanoid:EquipTool(rod) task.wait(0.4) end
-                            rod:Activate()
-                            if keypress and keyrelease then keypress(0x20) task.wait(0.1) keyrelease(0x20) end
-                            lastCastTime = tick()
-                        end
+                        tool:Activate()
                     end)
                 end
             end
