@@ -1,5 +1,5 @@
 -- ==========================================================
--- INDO HANGOUT AUTO-FISH (MINIGAME TERKUNCI - RAYCAST INJECTION)
+-- INDO HANGOUT AUTO-FISH (MINIGAME TERKUNCI - STATE FORCING)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -89,7 +89,7 @@ local function getFishingElements()
 end
 
 -- ==========================================
--- 3. MINIGAME LOGIC (DIKUNCI)
+-- 3. MINIGAME LOGIC (DIKUNCI - TERBUKTI BERHASIL)
 -- ==========================================
 RunService.Heartbeat:Connect(function()
     if not enabled then return end
@@ -133,7 +133,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================================
--- 4. AUTO CAST (SOLUSI MUTLAK - RAYCAST MOUSE INJECTION)
+-- 4. AUTO CAST (SOLUSI ALTERNATIF - MANIPULASI STATE LOKAL)
 -- ==========================================
 task.spawn(function()
     while true do
@@ -143,9 +143,8 @@ task.spawn(function()
             local char = player.Character
             if not char then continue end
             local humanoid = char:FindFirstChildOfClass("Humanoid")
-            local rootPart = char:FindFirstChild("HumanoidRootPart")
             
-            -- Amankan state melompat
+            -- Matikan lompat bawaan Roblox mobile saat memegang pancingan
             if humanoid then
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
             end
@@ -155,88 +154,46 @@ task.spawn(function()
 
             if not toolInHand and rodInBackpack and humanoid then
                 humanoid:EquipTool(rodInBackpack)
-                task.wait(0.8) 
+                task.wait(0.5) 
                 toolInHand = char:FindFirstChildWhichIsA("Tool")
             end
 
-            if fishingState == "IDLE" or (fishingState == "WAITING" and (os.clock() - lastCastTime) >= 20) then
-                if toolInHand and rootPart then
+            -- Cek keberadaan objek umpan secara real-time di Workspace
+            local bobberFound = false
+            for _, v in pairs(workspace:GetChildren()) do
+                if v.Name:lower():find("bobber") or v.Name:lower():find("bait") or v.Name:lower():find("hook") or v.Name:lower():find("pancing") then
+                    if char.PrimaryPart and (v:GetPivot().Position - char.PrimaryPart.Position).Magnitude < 120 then
+                        bobberFound = true
+                        break
+                    end
+                end
+            end
+
+            -- Sinkronisasi State jika umpan terdeteksi di air hasil lemparan manual
+            if bobberFound then
+                if fishingState == "IDLE" or fishingState == "COOLDOWN" then
                     fishingState = "WAITING"
                     lastCastTime = os.clock()
-                    
-                    pcall(function()
-                        warn(">>> [AUTO FISH] Menyuntikkan Target Koordinat 3D...")
+                    warn(">>> [AUTO FISH] Umpan terdeteksi di air! Mengunci posisi sistem...")
+                end
+            else
+                -- Jika tidak ada umpan di air dan status sedang IDLE, lakukan pemaksaan aktivasi
+                if fishingState == "IDLE" or (fishingState == "WAITING" and (os.clock() - lastCastTime) >= 15) then
+                    if toolInHand then
+                        fishingState = "WAITING"
+                        lastCastTime = os.clock()
                         
-                        -- KALKULASI TARGET DEPAN KARAKTER (Bypass Deteksi Mouse Kosong)
-                        -- Membuat target tiruan sejauh 25 studs di depan karakter mengarah ke air/tanah
-                        local forwardVector = rootPart.CFrame.LookVector
-                        local targetPosition = rootPart.Position + (forwardVector * 25) - Vector3.new(0, 4, 0)
-                        local fakeCFrame = CFrame.new(targetPosition)
-                        
-                        -- MANIPULASI OBJEK MOUSE SCRIPT LOKAL
-                        -- Memaksa sistem game membaca bahwa mouse kita sedang menunjuk ke targetPosition
-                        local mouse = player:GetMouse()
-                        if hookmetamethod and namecallmethod then
-                            -- Jika eksekutor mendukung hook tingkat tinggi, kita bajak properti Hit-nya
-                            local oldIndex
-                            oldIndex = hookmetamethod(game, "__index", function(self, index)
-                                if self == mouse and (index == "Hit" or index == "hit") then
-                                    return fakeCFrame
-                                elseif self == mouse and (index == "Target" or index == "target") then
-                                    return workspace:FindFirstChildOfClass("Terrain") or workspace
-                                end
-                                return oldIndex(self, index)
-                            end)
-                        end
-                        
-                        -- METODE EKSEKUSI 1: Pemicu Utama (Suku Cadang Tool)
-                        toolInHand:Activate()
-                        
-                        -- METODE EKSEKUSI 2: Deteksi Sinyal Event Bawaan Pancingan
-                        for _, obj in pairs(toolInHand:GetDescendants()) do
-                            if obj:IsA("RemoteEvent") then
-                                obj:FireServer(targetPosition)
-                                obj:FireServer("Cast", targetPosition)
-                                obj:FireServer("Click", targetPosition)
-                            end
-                        end
-                        
-                        -- METODE EKSEKUSI 3: Simulasi Input Hardware Tingkat Rendah (Tanpa Sentuh UI)
-                        -- Menggunakan perintah enter/klik internal roblox untuk memicu tool tanpa memicu tombol lompat mobile
-                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-                        task.wait(0.1)
-                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-                        
-                        warn(">>> [AUTO FISH] Menunggu Umpan Muncul...")
-                        
-                        -- Deteksi Umpan (Failsafe 5 detik)
-                        local success = false
-                        local startTime = os.clock()
-                        
-                        repeat
-                            task.wait(0.2)
-                            if fishingState == "MINIGAME" then
-                                success = true
-                                break
-                            end
+                        pcall(function()
+                            -- PAKSA SEPERTI KLIK LAYAR SENTUH BERULANG (Fast Click Attack)
+                            toolInHand:Activate()
                             
-                            for _, v in pairs(workspace:GetChildren()) do
-                                if v.Name:lower():find("bobber") or v.Name:lower():find("bait") or v.Name:lower():find("hook") or v.Name:lower():find("pancing") then
-                                    if (v:GetPivot().Position - rootPart.Position).Magnitude < 100 then
-                                        success = true
-                                        break
-                                    end
-                                end
-                            end
-                        until success or (os.clock() - startTime) > 5
-                        
-                        if not success then
-                            warn(">>> [AUTO FISH] Gagal terdeteksi, mengulangi proses...")
-                            fishingState = "IDLE" 
-                        else
-                            warn(">>> [AUTO FISH] BERHASIL! Umpan meluncur ke air.")
-                        end
-                    end)
+                            -- Kirim sinyal eksekusi internal via game engine
+                            local cam = workspace.CurrentCamera
+                            VirtualInputManager:SendMouseButtonEvent(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2, 0, true, game, 0)
+                            task.wait(0.05)
+                            VirtualInputManager:SendMouseButtonEvent(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2, 0, false, game, 0)
+                        end)
+                    end
                 end
             end
         end
