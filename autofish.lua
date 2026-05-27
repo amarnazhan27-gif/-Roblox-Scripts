@@ -1,5 +1,5 @@
 -- ==========================================================
--- INDO HANGOUT AUTO-FISH (MINIGAME TERKUNCI - STATE FORCING)
+-- INDO HANGOUT ALL-IN-ONE AUTO-FISH (BLIND MACRO)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -7,70 +7,62 @@ local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
--- State Machine Global
 local enabled = false
-local fishingState = "IDLE" 
-local lastCastTime = os.clock()
-local lastStateChange = os.clock()
 local isSpacePressed = false
+local lastCastTime = 0
+local castCooldown = 7 -- Jeda waktu (detik) untuk melempar ulang jika ikan tidak gigit
 
 -- ==========================================
--- 1. GUI KONTROL INTERFACE (DIKUNCI)
+-- 1. GUI INTERFACE
 -- ==========================================
 local gui = Instance.new("ScreenGui")
-gui.Name = "AutoFish_Murni"
+gui.Name = "AutoFish_FullSystem"
 gui.ResetOnSpawn = false
 gui.Parent = game:GetService("CoreGui")
 
 local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0, 180, 0, 90)
-main.Position = UDim2.new(1, -190, 0, 50) 
-main.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+main.Size = UDim2.new(0, 200, 0, 100)
+main.Position = UDim2.new(1, -210, 0, 50) 
+main.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 main.BorderSizePixel = 2
-main.BorderColor3 = Color3.fromRGB(200, 200, 200)
+main.BorderColor3 = Color3.fromRGB(0, 255, 150)
 main.Active = true
 main.Draggable = true 
 
 local title = Instance.new("TextLabel", main)
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundTransparency = 1
-title.Text = "AUTO FISH ALUR"
-title.TextColor3 = Color3.new(1, 1, 1)
+title.Text = "AUTO FISH v2 (BLIND)"
+title.TextColor3 = Color3.fromRGB(0, 255, 150)
 title.Font = Enum.Font.Code
 title.TextScaled = true
 
 local button = Instance.new("TextButton", main)
-button.Size = UDim2.new(0.9, 0, 0, 40)
+button.Size = UDim2.new(0.9, 0, 0, 45)
 button.Position = UDim2.new(0.05, 0, 0.45, 0)
 button.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-button.Text = "OFF"
+button.Text = "SYSTEM OFF"
 button.Font = Enum.Font.GothamBold
 button.TextScaled = true
 button.TextColor3 = Color3.new(1, 1, 1)
 
 button.MouseButton1Click:Connect(function()
     enabled = not enabled
-    button.Text = enabled and "ON" or "OFF"
+    button.Text = enabled and "SYSTEM ON" or "SYSTEM OFF"
     button.BackgroundColor3 = enabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
     
     if not enabled then
-        fishingState = "IDLE"
         if isSpacePressed then
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
             isSpacePressed = false
         end
-        pcall(function()
-            local char = player.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true) end
-        end)
     else
-        fishingState = "IDLE"
+        lastCastTime = tick() -- Reset waktu saat dinyalakan
     end
 end)
 
 -- ==========================================
--- 2. FUNGSI PELACAK INDIKATOR BAR (DIKUNCI)
+-- 2. RADAR PELACAK BAR MINIGAME
 -- ==========================================
 local function getFishingElements()
     local playerGui = player:FindFirstChild("PlayerGui")
@@ -89,16 +81,25 @@ local function getFishingElements()
 end
 
 -- ==========================================
--- 3. MINIGAME LOGIC (DIKUNCI - TERBUKTI BERHASIL)
+-- 3. SIMULASI KETUK LAYAR (LEMPAR PANCING)
+-- ==========================================
+local function blindClick()
+    -- Simulasi ketukan di tengah layar HP untuk memicu item alat pancing (harus di-equip manual)
+    VirtualInputManager:SendMouseButtonEvent(500, 500, 0, true, game)
+    task.wait(0.1)
+    VirtualInputManager:SendMouseButtonEvent(500, 500, 0, false, game)
+end
+
+-- ==========================================
+-- 4. LOGIKA UTAMA (LOOPING)
 -- ==========================================
 RunService.Heartbeat:Connect(function()
     if not enabled then return end
 
     local white, red = getFishingElements()
 
+    -- Kondisi A: Minigame Muncul (Fokus menangkan ikan)
     if white and red and white.Visible then
-        fishingState = "MINIGAME"
-        
         local whiteCenter = white.AbsolutePosition.X + (white.AbsoluteSize.X / 2)
         local redCenter = red.AbsolutePosition.X + (red.AbsoluteSize.X / 2)
         local tolerance = white.AbsoluteSize.X * 0.1 
@@ -115,87 +116,21 @@ RunService.Heartbeat:Connect(function()
             end
         end
         
+        -- Perbarui waktu agar tidak melempar ulang saat minigame sedang berjalan
+        lastCastTime = tick() 
+
+    -- Kondisi B: Standby / Minigame Hilang (Umpan belum dilempar atau ikan lepas/tertangkap)
     else
         if isSpacePressed then
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
             isSpacePressed = false
+            lastCastTime = tick() + 2 -- Beri jeda 2 detik setelah menangkap sebelum lempar lagi
         end
-        
-        if fishingState == "MINIGAME" then
-            fishingState = "COOLDOWN"
-            lastStateChange = os.clock()
-        elseif fishingState == "COOLDOWN" then
-            if (os.clock() - lastStateChange) >= 1.5 then
-                fishingState = "IDLE"
-            end
-        end
-    end
-end)
 
--- ==========================================
--- 4. AUTO CAST (SOLUSI ALTERNATIF - MANIPULASI STATE LOKAL)
--- ==========================================
-task.spawn(function()
-    while true do
-        task.wait(0.5) 
-        
-        if enabled then
-            local char = player.Character
-            if not char then continue end
-            local humanoid = char:FindFirstChildOfClass("Humanoid")
-            
-            -- Matikan lompat bawaan Roblox mobile saat memegang pancingan
-            if humanoid then
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
-            end
-            
-            local toolInHand = char:FindFirstChildWhichIsA("Tool")
-            local rodInBackpack = player.Backpack:FindFirstChildWhichIsA("Tool")
-
-            if not toolInHand and rodInBackpack and humanoid then
-                humanoid:EquipTool(rodInBackpack)
-                task.wait(0.5) 
-                toolInHand = char:FindFirstChildWhichIsA("Tool")
-            end
-
-            -- Cek keberadaan objek umpan secara real-time di Workspace
-            local bobberFound = false
-            for _, v in pairs(workspace:GetChildren()) do
-                if v.Name:lower():find("bobber") or v.Name:lower():find("bait") or v.Name:lower():find("hook") or v.Name:lower():find("pancing") then
-                    if char.PrimaryPart and (v:GetPivot().Position - char.PrimaryPart.Position).Magnitude < 120 then
-                        bobberFound = true
-                        break
-                    end
-                end
-            end
-
-            -- Sinkronisasi State jika umpan terdeteksi di air hasil lemparan manual
-            if bobberFound then
-                if fishingState == "IDLE" or fishingState == "COOLDOWN" then
-                    fishingState = "WAITING"
-                    lastCastTime = os.clock()
-                    warn(">>> [AUTO FISH] Umpan terdeteksi di air! Mengunci posisi sistem...")
-                end
-            else
-                -- Jika tidak ada umpan di air dan status sedang IDLE, lakukan pemaksaan aktivasi
-                if fishingState == "IDLE" or (fishingState == "WAITING" and (os.clock() - lastCastTime) >= 15) then
-                    if toolInHand then
-                        fishingState = "WAITING"
-                        lastCastTime = os.clock()
-                        
-                        pcall(function()
-                            -- PAKSA SEPERTI KLIK LAYAR SENTUH BERULANG (Fast Click Attack)
-                            toolInHand:Activate()
-                            
-                            -- Kirim sinyal eksekusi internal via game engine
-                            local cam = workspace.CurrentCamera
-                            VirtualInputManager:SendMouseButtonEvent(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2, 0, true, game, 0)
-                            task.wait(0.05)
-                            VirtualInputManager:SendMouseButtonEvent(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2, 0, false, game, 0)
-                        end)
-                    end
-                end
-            end
+        -- Jalankan pengetukan otomatis berkala jika sudah melewati batas cooldown
+        if tick() - lastCastTime > castCooldown then
+            blindClick()
+            lastCastTime = tick()
         end
     end
 end)
