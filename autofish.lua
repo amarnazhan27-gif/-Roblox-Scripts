@@ -173,35 +173,51 @@ task.spawn(function()
                     lastCastTime = os.time()
                     
                     pcall(function()
-                        -- LANGKAH 3: MELEMPAR UMPAN
-                        -- 1. Cari dan paksa tembak RemoteEvent dengan koordinat 3D
-                        -- (Penting: Basic Rod sering butuh target lokasi untuk melempar)
+                        -- LANGKAH 3: MELEMPAR UMPAN (FORCE SYSTEM)
                         local root = char:FindFirstChild("HumanoidRootPart")
                         local targetPos = root and (root.Position + (root.CFrame.LookVector * 15)) or Vector3.new(0,0,0)
 
+                        -- 1. FORCE REMOTE (Mencari remote pancingan di seluruh game)
                         for _, v in pairs(toolInHand:GetDescendants()) do
                             if v:IsA("RemoteEvent") then
                                 pcall(function() v:FireServer(targetPos) end)
                                 pcall(function() v:FireServer() end)
                             end
                         end
+                        -- Scan ReplicatedStorage (Beberapa game menyimpan remote pancing di sini)
+                        pcall(function()
+                            for _, v in pairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
+                                if v:IsA("RemoteEvent") and (v.Name:lower():find("fish") or v.Name:lower():find("cast")) then
+                                    v:FireServer(targetPos)
+                                    v:FireServer("Cast", targetPos)
+                                end
+                            end
+                        end)
 
-                        -- 2. Simulasi Klik (Mouse) & Sentuhan (Touch)
-                        -- Menggunakan koordinat area air (posisi 35% layar)
+                        -- 2. UNIVERSAL CLICKER (Menembus proteksi manual)
                         local x = workspace.CurrentCamera.ViewportSize.X / 2
                         local y = workspace.CurrentCamera.ViewportSize.Y * 0.35 
                         
                         toolInHand:Activate()
-                        
-                        -- Mouse Click
-                        VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
-                        task.wait(0.1)
-                        VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
-                        
-                        -- Touch Simulation (Cocok untuk BlueStacks/Mobile)
-                        VirtualInputManager:SendTouchEvent(1, Enum.UserInputState.Begin, Vector2.new(x, y))
-                        task.wait(0.1)
-                        VirtualInputManager:SendTouchEvent(1, Enum.UserInputState.End, Vector2.new(x, y))
+
+                        -- Gunakan fungsi khusus executor jika ada (Delta/Fluxus/Vegeta)
+                        if mouse1click then
+                            mouse1click()
+                        elseif mouse1press then
+                            mouse1press()
+                            task.wait(0.1)
+                            mouse1release()
+                        else
+                            -- Fallback ke VirtualInputManager jika tidak ada fungsi khusus
+                            VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+                            task.wait(0.1)
+                            VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+                            
+                            -- Sentuhan (Touch)
+                            VirtualInputManager:SendTouchEvent(1, Enum.UserInputState.Begin, Vector2.new(x, y))
+                            task.wait(0.1)
+                            VirtualInputManager:SendTouchEvent(1, Enum.UserInputState.End, Vector2.new(x, y))
+                        end
                     end)
                 end
             end
