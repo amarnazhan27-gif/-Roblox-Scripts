@@ -143,42 +143,48 @@ end)
 -- ==========================================
 task.spawn(function()
     while true do
-        task.wait(0.3)
+        task.wait(0.5) -- Sedikit lebih lambat agar tidak lagg/crash
         
         if enabled then
             local char = player.Character
-            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+            if not char then continue end
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
             
             -- Anti Lompat dikunci
             if humanoid and humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
             end
             
-            -- Jika Statusnya "Siap Lempar" ATAU "Sudah 20 Detik Menunggu"
+            -- Cek apakah Rod sudah dipegang atau ada di Backpack
+            local toolInHand = char:FindFirstChildWhichIsA("Tool")
+            local rodInBackpack = player.Backpack:FindFirstChild("Fishing Rod") or player.Backpack:FindFirstChild("Rod") or player.Backpack:FindFirstChildWhichIsA("Tool")
+
+            -- Jika tidak pegang apa-apa, ambil dari backpack
+            if not toolInHand and rodInBackpack and humanoid then
+                humanoid:EquipTool(rodInBackpack)
+                task.wait(0.5)
+                toolInHand = char:FindFirstChildWhichIsA("Tool")
+            end
+
+            -- Jika Statusnya "Siap Lempar" ATAU "Sudah 20 Detik Menunggu" (mungkin nyangkut)
             if fishingState == "IDLE" or (fishingState == "WAITING" and (os.time() - lastCastTime) >= 20) then
-                fishingState = "WAITING"
-                lastCastTime = os.time()
-                
-                pcall(function()
-                    -- LANGKAH 2: OTOMATIS MEMEGANG ROD
-                    -- [FIX] Ganti SendKeyEvent KeyCode.One → EquipTool()
-                    -- SendKeyEvent tidak berfungsi di Android karena tidak ada keyboard fisik
-                    local backpack = player.Backpack
-                    local rod = backpack:FindFirstChildWhichIsA("Tool")
-                    if rod and humanoid then
-                        humanoid:EquipTool(rod)
-                    end
+                if toolInHand then
+                    fishingState = "WAITING"
+                    lastCastTime = os.time()
                     
-                    task.wait(0.6) -- Jeda agar rod benar-benar tergenggam di tangan karakter
-                    
-                    -- LANGKAH 3: MELEMPAR UMPAN
-                    -- [FIX] Ganti SendMouseButtonEvent + mouse1click() → Tool:Activate()
-                    -- Mouse event & mouse1click() tidak berfungsi di Android (touch-based)
-                    local equippedTool = char:FindFirstChildWhichIsA("Tool")
-                    if equippedTool then
-                        equippedTool:Activate()
-                    end
-                end)
+                    pcall(function()
+                        -- LANGKAH 3: MELEMPAR UMPAN
+                        -- Gunakan kombinasi Activate + Virtual Click untuk kepastian di Android
+                        toolInHand:Activate()
+                        
+                        -- Simulasi klik di tengah layar untuk memicu casting
+                        local x = workspace.CurrentCamera.ViewportSize.X / 2
+                        local y = workspace.CurrentCamera.ViewportSize.Y / 2
+                        VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+                        task.wait(0.05)
+                        VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+                    end)
+                end
             end
         end
     end
