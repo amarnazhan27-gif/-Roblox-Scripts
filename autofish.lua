@@ -1,68 +1,143 @@
 -- ==========================================================
--- INDO HANGOUT ALL-IN-ONE AUTO-FISH (FIXED SAFE ZONE CLICK)
+-- INDO HANGOUT AUTO-FISH (SUPREME NEON UI - ZERO JUMP GUARANTEED)
 -- ==========================================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 
 local enabled = false
 local isSpacePressed = false
-local lastCastTime = 0
-local castCooldown = 7 -- Jeda waktu (detik) untuk melempar ulang jika ikan tidak gigit
+
+local lastWhiteX = 0
+local lastUpdateTime = 0
 
 -- ==========================================
--- 1. GUI INTERFACE
+-- 1. PREMIUM CYBERPUNK GUI INTERFACE
 -- ==========================================
 local gui = Instance.new("ScreenGui")
-gui.Name = "AutoFish_FullSystem"
+gui.Name = "AutoFish_SupremeUI"
 gui.ResetOnSpawn = false
 gui.Parent = game:GetService("CoreGui")
 
 local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0, 200, 0, 100)
-main.Position = UDim2.new(1, -210, 0, 150) 
-main.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-main.BorderSizePixel = 2
-main.BorderColor3 = Color3.fromRGB(0, 255, 150)
+main.Size = UDim2.new(0, 220, 0, 120)
+main.Position = UDim2.new(1, -240, 0, 60) 
+main.BackgroundColor3 = Color3.fromRGB(15, 16, 22) 
+main.BorderSizePixel = 0
 main.Active = true
 main.Draggable = true 
 
+local mainCorner = Instance.new("UICorner", main)
+mainCorner.CornerRadius = UDim.new(0, 12)
+
+local mainStroke = Instance.new("UIStroke", main)
+mainStroke.Thickness = 2
+mainStroke.Color = Color3.fromRGB(0, 230, 255) 
+mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+local glowBar = Instance.new("Frame", main)
+glowBar.Size = UDim2.new(1, 0, 0, 4)
+glowBar.Position = UDim2.new(0, 0, 0, 0)
+glowBar.BackgroundColor3 = Color3.fromRGB(0, 230, 255)
+glowBar.BorderSizePixel = 0
+
+local barCorner = Instance.new("UICorner", glowBar)
+barCorner.CornerRadius = UDim.new(0, 12)
+
 local title = Instance.new("TextLabel", main)
-title.Size = UDim2.new(1, 0, 0, 30)
+title.Size = UDim2.new(1, 0, 0, 35)
+title.Position = UDim2.new(0, 0, 0, 8)
 title.BackgroundTransparency = 1
-title.Text = "AUTO FISH v3 (SAFE CLICK)"
-title.TextColor3 = Color3.fromRGB(0, 255, 150)
-title.Font = Enum.Font.Code
-title.TextScaled = true
+title.Text = "⚡ CYBER RADAR V1.3"
+title.TextColor3 = Color3.fromRGB(240, 240, 245)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 14
+title.TextXAlignment = Enum.TextXAlignment.Center
+
+local statusLabel = Instance.new("TextLabel", main)
+statusLabel.Size = UDim2.new(1, 0, 0, 20)
+statusLabel.Position = UDim2.new(0, 0, 0, 38)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "STATUS: STANDBY"
+statusLabel.TextColor3 = Color3.fromRGB(150, 155, 170)
+statusLabel.Font = Enum.Font.GothamSemibold
+statusLabel.TextSize = 10
 
 local button = Instance.new("TextButton", main)
-button.Size = UDim2.new(0.9, 0, 0, 45)
-button.Position = UDim2.new(0.05, 0, 0.45, 0)
-button.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-button.Text = "SYSTEM OFF"
+button.Size = UDim2.new(0.85, 0, 0, 40)
+button.Position = UDim2.new(0.075, 0, 0.55, 0)
+button.BackgroundColor3 = Color3.fromRGB(240, 45, 80) 
+button.Text = "ACTIVATE SYSTEM"
 button.Font = Enum.Font.GothamBold
-button.TextScaled = true
+button.TextSize = 12
 button.TextColor3 = Color3.new(1, 1, 1)
+button.AutoButtonColor = false
+
+local btnCorner = Instance.new("UICorner", button)
+btnCorner.CornerRadius = UDim.new(0, 8)
+
+local btnStroke = Instance.new("UIStroke", button)
+btnStroke.Thickness = 1.5
+btnStroke.Color = Color3.fromRGB(255, 255, 255)
+btnStroke.Transparency = 0.8
+
+local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local tweenOn = TweenService:Create(button, tweenInfo, {BackgroundColor3 = Color3.fromRGB(0, 200, 115)}) 
+local tweenOff = TweenService:Create(button, tweenInfo, {BackgroundColor3 = Color3.fromRGB(240, 45, 80)})
+local strokeOn = TweenService:Create(mainStroke, tweenInfo, {Color = Color3.fromRGB(0, 255, 150)}) 
+local strokeOff = TweenService:Create(mainStroke, tweenInfo, {Color = Color3.fromRGB(0, 230, 255)})
+
+-- ==========================================
+-- SANA SINI AMAN: PENGUNCI JUMP TOTAL PASCA-GAME
+-- ==========================================
+local function forceStopJump()
+    isSpacePressed = false
+    -- Kirim sinyal lepas spasi berlapis untuk memastikan tidak tersangkut di sistem
+    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+    
+    pcall(function()
+        local character = player.Character
+        if character then
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                -- Matikan fungsi lompat sepenuhnya
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+                humanoid.JumpPower = 0
+                
+                -- Berikan jeda aman agar input lag dari Auto Clicker luar selesai diproses game
+                task.wait(0.3) 
+                
+                -- Kembalikan fungsi lompat ke normal untuk pergerakan manual
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+                humanoid.JumpPower = 50
+            end
+        end
+    end)
+end
 
 button.MouseButton1Click:Connect(function()
     enabled = not enabled
-    button.Text = enabled and "SYSTEM ON" or "SYSTEM OFF"
-    button.BackgroundColor3 = enabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
-    
-    if not enabled then
-        if isSpacePressed then
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-            isSpacePressed = false
-        end
+    if enabled then
+        tweenOn:Play()
+        strokeOn:Play()
+        button.Text = "SYSTEM ACTIVE"
+        statusLabel.Text = "STATUS: SCANNING BAR..."
+        statusLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
     else
-        lastCastTime = tick()
+        tweenOff:Play()
+        strokeOff:Play()
+        button.Text = "ACTIVATE SYSTEM"
+        statusLabel.Text = "STATUS: STANDBY"
+        statusLabel.TextColor3 = Color3.fromRGB(150, 155, 170)
+        forceStopJump()
     end
 end)
 
 -- ==========================================
--- 2. RADAR PELACAK BAR MINIGAME
+-- 2. PELACAK GUI TINGKAT TINGGI
 -- ==========================================
 local function getFishingElements()
     local playerGui = player:FindFirstChild("PlayerGui")
@@ -81,63 +156,57 @@ local function getFishingElements()
 end
 
 -- ==========================================
--- 3. AMAN DARI UI: SIMULASI KETUK AREA SUNGAI (KIRI)
--- ==========================================
-local function blindClick()
-    local camera = workspace.CurrentCamera
-    if not camera then return end
-    
-    -- Menggunakan persentase layar agar akurat di HP ukuran apapun
-    -- X = 25% dari kiri layar (Area sungai yang kosong)
-    -- Y = 50% dari atas layar (Tengah-tengah vertikal, menghindari analog jalan)
-    local safeX = camera.ViewportSize.X * 0.25
-    local safeY = camera.ViewportSize.Y * 0.5
-
-    -- Eksekusi ketukan di zona aman
-    VirtualInputManager:SendMouseButtonEvent(safeX, safeY, 0, true, game)
-    task.wait(0.05)
-    VirtualInputManager:SendMouseButtonEvent(safeX, safeY, 0, false, game)
-end
-
--- ==========================================
--- 4. LOGIKA UTAMA (LOOPING)
+-- 3. LOGIKA PREDIKSI & EKSEKUSI INSTAN
 -- ==========================================
 RunService.Heartbeat:Connect(function()
     if not enabled then return end
 
     local white, red = getFishingElements()
 
-    -- Kondisi A: Minigame Muncul
     if white and red and white.Visible then
+        statusLabel.Text = "STATUS: WINNING MINIGAME 🔥"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+        
+        local currentTime = tick()
+        local deltaTime = currentTime - lastUpdateTime
+        
         local whiteCenter = white.AbsolutePosition.X + (white.AbsoluteSize.X / 2)
         local redCenter = red.AbsolutePosition.X + (red.AbsoluteSize.X / 2)
-        local tolerance = white.AbsoluteSize.X * 0.1 
+        
+        local velocity = 0
+        if deltaTime > 0 and lastWhiteX ~= 0 then
+            velocity = (whiteCenter - lastWhiteX) / deltaTime
+        end
+        
+        lastWhiteX = whiteCenter
+        lastUpdateTime = currentTime
 
-        if whiteCenter < (redCenter - tolerance) then
+        local predictedWhiteCenter = whiteCenter + (velocity * 0.05)
+        
+        local halfRedSize = red.AbsoluteSize.X / 2
+        local leftBound = redCenter - halfRedSize
+        local rightBound = redCenter + halfRedSize
+
+        if predictedWhiteCenter >= leftBound and predictedWhiteCenter <= rightBound then
             if not isSpacePressed then
                 VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
                 isSpacePressed = true
             end
-        elseif whiteCenter > (redCenter + tolerance) then
+        else
             if isSpacePressed then
                 VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
                 isSpacePressed = false
             end
         end
-        
-        lastCastTime = tick() 
-
-    -- Kondisi B: Standby / Selesai Memancing
     else
-        if isSpacePressed then
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-            isSpacePressed = false
-            lastCastTime = tick() + 2 -- Jeda pasca tangkap
+        lastWhiteX = 0
+        if enabled then
+            statusLabel.Text = "STATUS: SCANNING BAR..."
+            statusLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
         end
-
-        if tick() - lastCastTime > castCooldown then
-            blindClick()
-            lastCastTime = tick()
+        if isSpacePressed then
+            -- Langsung kunci kaki begitu minigame selesai/hilang dari layar
+            forceStopJump()
         end
     end
 end)
