@@ -1,5 +1,5 @@
 -- ==========================================================
--- INDO HANGOUT AUTO-FISH (V8 - THE ULTIMATE UNIFIED SCRIPT)
+-- INDO HANGOUT AUTO-FISH (REVISI FINAL - FIXED JUMP & CAST)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -7,7 +7,7 @@ local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
--- State Machine Global (Aman & Sinkron)
+-- State Machine Global
 local enabled = false
 local fishingState = "IDLE" -- IDLE, WAITING, MINIGAME, COOLDOWN
 local lastCastTime = 0
@@ -15,10 +15,10 @@ local lastMinigameTime = 0
 local isSpacePressed = false
 
 -- ==========================================
--- 1. GUI KONTROL INTERFACE
+-- 1. GUI KONTROL INTERFACE (TETAP)
 -- ==========================================
 local gui = Instance.new("ScreenGui")
-gui.Name = "AutoFish_V8_Unified"
+gui.Name = "AutoFish_Final_Fixed"
 gui.ResetOnSpawn = false
 gui.Parent = game:GetService("CoreGui")
 
@@ -34,7 +34,7 @@ main.Draggable = true
 local title = Instance.new("TextLabel", main)
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundTransparency = 1
-title.Text = "AUTO FISH V8"
+title.Text = "AUTO FISH v3"
 title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.Code
 title.TextScaled = true
@@ -59,13 +59,19 @@ button.MouseButton1Click:Connect(function()
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
             isSpacePressed = false
         end
+        -- SOLUSI 1: Kembalikan fungsi lompat normal saat bot dimatikan
+        pcall(function()
+            local char = player.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true) end
+        end)
     else
         fishingState = "IDLE"
     end
 end)
 
 -- ==========================================
--- 2. FUNGSI PELACAK INDIKATOR BAR (MILIK ANDA)
+-- 2. FUNGSI PELACAK INDIKATOR BAR (MURNI ASLI)
 -- ==========================================
 local function getFishingElements()
     local playerGui = player:FindFirstChild("PlayerGui")
@@ -84,20 +90,18 @@ local function getFishingElements()
 end
 
 -- ==========================================
--- 3. INTERFASI HEARTBEAT (100% ANTI-YIELD / ANTI-LOMPAT)
+-- 3. LOGIKA MINIGAME (TETAP & DIJAGA KEASLIANNYA)
 -- ==========================================
 RunService.Heartbeat:Connect(function()
     if not enabled then return end
 
     local white, red = getFishingElements()
 
-    -- JIKA UI MINIGAME MUNCUL (Bermain Minigame)
     if white and red and white.Visible then
         fishingState = "MINIGAME"
         
         local whiteCenter = white.AbsolutePosition.X + (white.AbsoluteSize.X / 2)
         local redCenter = red.AbsolutePosition.X + (red.AbsoluteSize.X / 2)
-        -- Toleransi jarak 10% sesuai kodingan sukses Anda
         local tolerance = white.AbsoluteSize.X * 0.1 
 
         if whiteCenter < (redCenter - tolerance) then
@@ -112,21 +116,17 @@ RunService.Heartbeat:Connect(function()
             end
         end
         
-    -- JIKA UI MINIGAME TIDAK ADA DI LAYAR
     else
-        -- Proteksi Instant: Lepas spasi detik ini juga agar TIDAK LOMPAT
         if isSpacePressed then
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
             isSpacePressed = false
         end
         
-        -- Manajemen Transisi State Berbasis Waktu Mikro (Aman dari Bug Thread)
         if fishingState == "MINIGAME" then
             fishingState = "COOLDOWN"
             lastMinigameTime = os.time()
         elseif fishingState == "COOLDOWN" then
-            -- Jeda 2 detik setelah minigame menghilang agar animasi selesai, lalu kembali ke IDLE
-            if os.time() - lastMinigameTime >= 2 then
+            if os.time() - lastMinigameTime >= 1 then
                 fishingState = "IDLE"
             end
         end
@@ -134,17 +134,23 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================================
--- 4. LOOP SEPARASI OTOMATIS LEMPAR & RECAST (20 DETIK)
+-- 4. SOLUSI FIX: LOOP LEMPAR UMPAN & ANTI-LOMPAT
 -- ==========================================
 task.spawn(function()
     while true do
-        task.wait(0.5) -- Cek berkala secara stabil setiap setengah detik
+        task.wait(0.3)
         
         if enabled then
             local char = player.Character
             local tool = char and char:FindFirstChildOfClass("Tool")
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
             
-            -- Otomatis ambil pancingan dari tas jika belum dipegang
+            -- SOLUSI 1: Kunci status lompat secara realtime agar karakter tidak melompat di sela-sela game
+            if humanoid and humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+            end
+            
+            -- Otomatis pegang pancingan jika turun ke backpack
             if not tool and player:FindFirstChild("Backpack") then
                 local backpackTool = player.Backpack:FindFirstChildOfClass("Tool")
                 if backpackTool then
@@ -155,32 +161,35 @@ task.spawn(function()
             end
             
             if tool then
-                -- TAHAP TEPAT: JIKA STATUS IDLE, LEMPAR UMPAN!
+                -- SOLUSI 2: Deteksi tengah layar dinamis untuk lempar umpan pasti keluar
                 if fishingState == "IDLE" then
                     fishingState = "WAITING"
                     lastCastTime = os.time()
-                    print("[Auto-Fish] Melempar umpan otomatis...")
                     
                     pcall(function()
                         tool:Activate()
-                        -- Simulasi klik fisik di tengah layar untuk memicu pancingan custom
-                        VirtualInputManager:SendMouseButtonEvent(200, 200, 0, true, game, 0)
-                        task.wait(0.1)
-                        VirtualInputManager:SendMouseButtonEvent(200, 200, 0, false, game, 0)
+                        -- Dapatkan titik tengah layar perangkat secara akurat
+                        local cam = workspace.CurrentCamera
+                        local screenCenter = cam.ViewportSize / 2
+                        
+                        -- Simulasi klik fisik tepat di tengah layar game
+                        VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, true, game, 0)
+                        task.wait(0.05)
+                        VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, false, game, 0)
                     end)
                     
-                -- TAHAP FAILSAFE: JIKA SUDAH 20 DETIK TANPA GIGITAN, RECAST!
+                -- Jarak umpan ke minigame jika 20 detik zonk
                 elseif fishingState == "WAITING" and (os.time() - lastCastTime) >= 20 then
                     fishingState = "IDLE"
-                    print("[Auto-Fish] Jarak umpan mencapai 20 detik. Tarik paksa dan lempar ulang!")
-                    
                     pcall(function()
-                        tool:Activate() -- Tarik pancingan kembali
-                        VirtualInputManager:SendMouseButtonEvent(200, 200, 0, true, game, 0)
-                        task.wait(0.1)
-                        VirtualInputManager:SendMouseButtonEvent(200, 200, 0, false, game, 0)
+                        tool:Activate()
+                        local cam = workspace.CurrentCamera
+                        local screenCenter = cam.ViewportSize / 2
+                        VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, true, game, 0)
+                        task.wait(0.05)
+                        VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, false, game, 0)
                     end)
-                    task.wait(1.5) -- Beri waktu jeda tarikan sebelum masuk ke loop lempar berikutnya
+                    task.wait(1)
                 end
             end
         end
