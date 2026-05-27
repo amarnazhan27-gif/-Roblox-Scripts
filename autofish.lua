@@ -1,5 +1,5 @@
 -- ==========================================================
--- INDO HANGOUT AUTO-FISH (KODE DIKUNCI - ALUR SISTEMATIS)
+-- INDO HANGOUT AUTO-FISH (ANDROID/DELTA - FIXED)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -71,7 +71,7 @@ button.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- FUNGSI PELACAK INDIKATOR BAR (DIKUNCI - TIDAK DIRUBAH)
+-- FUNGSI PELACAK INDIKATOR BAR (TIDAK DIRUBAH)
 -- ==========================================
 local function getFishingElements()
     local playerGui = player:FindFirstChild("PlayerGui")
@@ -90,7 +90,7 @@ local function getFishingElements()
 end
 
 -- ==========================================
--- LANGKAH 4 & 5: MINIGAME & REPEAT (DIKUNCI - TIDAK DIRUBAH)
+-- LANGKAH 4 & 5: MINIGAME & REPEAT (TIDAK DIRUBAH)
 -- ==========================================
 RunService.Heartbeat:Connect(function()
     if not enabled then return end
@@ -137,6 +137,9 @@ end)
 
 -- ==========================================
 -- LANGKAH 2 & 3: MEMEGANG ROD & MELEMPAR UMPAN
+-- [FIX ANDROID] Ganti SendKeyEvent + SendMouseButtonEvent
+-- dengan EquipTool() + Tool:Activate()
+-- karena Android tidak punya keyboard fisik & pakai touch event
 -- ==========================================
 task.spawn(function()
     while true do
@@ -157,24 +160,24 @@ task.spawn(function()
                 lastCastTime = os.time()
                 
                 pcall(function()
-                    -- LANGKAH 2: OTOMATIS MEMEGANG ROD (TEKAN KEYBOARD 1)
-                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
-                    task.wait(0.1)
-                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
+                    -- LANGKAH 2: OTOMATIS MEMEGANG ROD
+                    -- [FIX] Ganti SendKeyEvent KeyCode.One → EquipTool()
+                    -- SendKeyEvent tidak berfungsi di Android karena tidak ada keyboard fisik
+                    local backpack = player.Backpack
+                    local rod = backpack:FindFirstChildWhichIsA("Tool")
+                    if rod and humanoid then
+                        humanoid:EquipTool(rod)
+                    end
                     
-                    task.wait(0.5) -- Jeda setengah detik agar rod benar-benar tergenggam di tangan karakter
+                    task.wait(0.6) -- Jeda agar rod benar-benar tergenggam di tangan karakter
                     
-                    -- LANGKAH 3: MELEMPAR UMPAN DENGAN KLIK APAPUN DI LAYAR
-                    local cam = workspace.CurrentCamera
-                    local screenCenter = cam.ViewportSize / 2
-                    
-                    -- Sistem melakukan simulasi klik kiri mouse tepat di tengah-tengah layar
-                    VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, true, game, 0)
-                    task.wait(0.1)
-                    VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, false, game, 0)
-                    
-                    -- Failsafe Klik: Tambahan fungsi klik langsung khusus executor (opsional jika dibutuhkan)
-                    if mouse1click then mouse1click() end
+                    -- LANGKAH 3: MELEMPAR UMPAN
+                    -- [FIX] Ganti SendMouseButtonEvent + mouse1click() → Tool:Activate()
+                    -- Mouse event & mouse1click() tidak berfungsi di Android (touch-based)
+                    local equippedTool = char:FindFirstChildWhichIsA("Tool")
+                    if equippedTool then
+                        equippedTool:Activate()
+                    end
                 end)
             end
         end
