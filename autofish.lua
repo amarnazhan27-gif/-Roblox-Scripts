@@ -24,7 +24,7 @@ gui.Parent = game:GetService("CoreGui")
 
 local main = Instance.new("Frame", gui)
 main.Size = UDim2.new(0, 180, 0, 90)
-main.Position = UDim2.new(0.5, -90, 0.8, 0)
+main.Position = UDim2.new(1, -190, 0, 50) -- Pindah ke pojok kanan atas agar tidak menghalangi
 main.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 main.BorderSizePixel = 2
 main.BorderColor3 = Color3.fromRGB(200, 200, 200)
@@ -174,21 +174,34 @@ task.spawn(function()
                     
                     pcall(function()
                         -- LANGKAH 3: MELEMPAR UMPAN
-                        -- 1. Cari dan paksa tembak RemoteEvent (Solusi paling ampuh di Indo Hangout)
+                        -- 1. Cari dan paksa tembak RemoteEvent dengan koordinat 3D
+                        -- (Penting: Basic Rod sering butuh target lokasi untuk melempar)
+                        local root = char:FindFirstChild("HumanoidRootPart")
+                        local targetPos = root and (root.Position + (root.CFrame.LookVector * 15)) or Vector3.new(0,0,0)
+
                         for _, v in pairs(toolInHand:GetDescendants()) do
                             if v:IsA("RemoteEvent") then
+                                pcall(function() v:FireServer(targetPos) end)
                                 pcall(function() v:FireServer() end)
                             end
                         end
 
-                        -- 2. Simulasi Klik di area air (posisi 40% layar agar tidak kena badan sendiri)
+                        -- 2. Simulasi Klik (Mouse) & Sentuhan (Touch)
+                        -- Menggunakan koordinat area air (posisi 35% layar)
                         local x = workspace.CurrentCamera.ViewportSize.X / 2
-                        local y = workspace.CurrentCamera.ViewportSize.Y * 0.4 
+                        local y = workspace.CurrentCamera.ViewportSize.Y * 0.35 
                         
                         toolInHand:Activate()
+                        
+                        -- Mouse Click
                         VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
-                        task.wait(0.2)
+                        task.wait(0.1)
                         VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+                        
+                        -- Touch Simulation (Cocok untuk BlueStacks/Mobile)
+                        VirtualInputManager:SendTouchEvent(1, Enum.UserInputState.Begin, Vector2.new(x, y))
+                        task.wait(0.1)
+                        VirtualInputManager:SendTouchEvent(1, Enum.UserInputState.End, Vector2.new(x, y))
                     end)
                 end
             end
