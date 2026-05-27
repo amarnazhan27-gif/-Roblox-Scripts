@@ -173,22 +173,32 @@ task.spawn(function()
                     lastCastTime = os.time()
                     
                     pcall(function()
-                        -- LANGKAH 3: MELEMPAR UMPAN (INDONESIA HANGOUT EXACT SYSTEM)
-                        local rodRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Events"):FindFirstChild("RemoteEvent"):FindFirstChild("Rod")
+                        -- LOG: Nama alat yang digunakan
+                        warn(">>> [AUTO FISH] Alat: " .. toolInHand.Name)
+                        
+                        -- DEBUG: Cari Remote secara mendalam
+                        local rodRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Rod", true) 
                         
                         if rodRemote then
-                            -- Sinyal wajib agar server tahu pancingan aktif
+                            warn(">>> [AUTO FISH] Resetting Server State & Throwing...")
+                            -- 1. Reset Status (Agar server tidak menganggap lemparan sebelumnya masih aktif)
+                            rodRemote:FireServer("Unequipped", nil, toolInHand)
+                            task.wait(0.2)
                             rodRemote:FireServer("Equipped", nil, toolInHand)
-                            task.wait(0.1)
-                            -- Sinyal lempar umpan (Throw) yang ditemukan dari Dex
+                            task.wait(0.5)
+                            
+                            -- 2. Lakukan Lemparan
+                            toolInHand:Activate()
                             rodRemote:FireServer("Throw", nil, toolInHand)
+                            warn(">>> [AUTO FISH] Umpan telah dilempar!")
+                        else
+                            warn(">>> [AUTO FISH] Remote 'Rod' tidak ditemukan! Menggunakan klik fisik...")
+                            toolInHand:Activate()
                         end
 
-                        -- Backup: Simulasi Klik tetap dijalankan untuk memicu animasi lokal
+                        -- Backup: Simulasi Klik untuk Emulator
                         local x = workspace.CurrentCamera.ViewportSize.X / 2
                         local y = workspace.CurrentCamera.ViewportSize.Y * 0.35 
-                        
-                        toolInHand:Activate()
 
                         if mouse1click then
                             mouse1click()
@@ -203,6 +213,9 @@ task.spawn(function()
                         end
                     end)
                 end
+            elseif fishingState == "WAITING" and (os.time() - lastCastTime) >= 15 then
+                warn(">>> [AUTO FISH] Gagal cast, mencoba ulang...")
+                fishingState = "IDLE"
             end
         end
     end
