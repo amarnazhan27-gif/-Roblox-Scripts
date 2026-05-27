@@ -1,11 +1,10 @@
 -- ==========================================================
--- INDO HANGOUT AUTO-FISH (KODE DIKUNCI - FIX AUTO CAST SAJA)
+-- INDO HANGOUT AUTO-FISH (KODE DIKUNCI - ALUR SISTEMATIS)
 -- ==========================================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local VirtualUser = game:GetService("VirtualUser") -- Tambahan khusus untuk bypass klik layar
 local player = Players.LocalPlayer
 
 -- State Machine Global
@@ -16,10 +15,10 @@ local lastMinigameTime = 0
 local isSpacePressed = false
 
 -- ==========================================
--- 1. GUI KONTROL INTERFACE (TETAP)
+-- LANGKAH 1: MENGAKTIFKAN TOMBOL ON/OFF 
 -- ==========================================
 local gui = Instance.new("ScreenGui")
-gui.Name = "AutoFish_Final_Fixed"
+gui.Name = "AutoFish_Sistematis"
 gui.ResetOnSpawn = false
 gui.Parent = game:GetService("CoreGui")
 
@@ -35,7 +34,7 @@ main.Draggable = true
 local title = Instance.new("TextLabel", main)
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundTransparency = 1
-title.Text = "AUTO FISH v3"
+title.Text = "AUTO FISH ALUR"
 title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.Code
 title.TextScaled = true
@@ -72,7 +71,7 @@ button.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- 2. FUNGSI PELACAK INDIKATOR BAR (DIKUNCI)
+-- FUNGSI PELACAK INDIKATOR BAR (DIKUNCI - TIDAK DIRUBAH)
 -- ==========================================
 local function getFishingElements()
     local playerGui = player:FindFirstChild("PlayerGui")
@@ -91,7 +90,7 @@ local function getFishingElements()
 end
 
 -- ==========================================
--- 3. LOGIKA MINIGAME & ANTI LOMPAT (DIKUNCI)
+-- LANGKAH 4 & 5: MINIGAME & REPEAT (DIKUNCI - TIDAK DIRUBAH)
 -- ==========================================
 RunService.Heartbeat:Connect(function()
     if not enabled then return end
@@ -99,6 +98,7 @@ RunService.Heartbeat:Connect(function()
     local white, red = getFishingElements()
 
     if white and red and white.Visible then
+        -- TAHAP MINIGAME SEDANG BERJALAN
         fishingState = "MINIGAME"
         
         local whiteCenter = white.AbsolutePosition.X + (white.AbsoluteSize.X / 2)
@@ -123,19 +123,20 @@ RunService.Heartbeat:Connect(function()
             isSpacePressed = false
         end
         
+        -- LANGKAH 6: REPEAT (KEMBALI KE TAHAP MELEMPAR UMPAN SETELAH MINIGAME SELESAI)
         if fishingState == "MINIGAME" then
             fishingState = "COOLDOWN"
             lastMinigameTime = os.time()
         elseif fishingState == "COOLDOWN" then
             if os.time() - lastMinigameTime >= 1 then
-                fishingState = "IDLE"
+                fishingState = "IDLE" -- Status kembali menjadi IDLE (Siap mengulang Langkah 2 & 3)
             end
         end
     end
 end)
 
 -- ==========================================
--- 4. LOOP LEMPAR UMPAN (HANYA INI YANG DIUBAH)
+-- LANGKAH 2 & 3: MEMEGANG ROD & MELEMPAR UMPAN
 -- ==========================================
 task.spawn(function()
     while true do
@@ -143,45 +144,38 @@ task.spawn(function()
         
         if enabled then
             local char = player.Character
-            local tool = char and char:FindFirstChildOfClass("Tool")
             local humanoid = char and char:FindFirstChildOfClass("Humanoid")
             
-            -- Kunci status lompat
+            -- Anti Lompat dikunci
             if humanoid and humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
             end
             
-            -- Otomatis pegang pancingan
-            if not tool and player:FindFirstChild("Backpack") then
-                local backpackTool = player.Backpack:FindFirstChildOfClass("Tool")
-                if backpackTool then
-                    backpackTool.Parent = char
-                    task.wait(0.3)
-                    tool = backpackTool
-                end
-            end
-            
-            if tool then
-                -- JIKA STATUS IDLE (SIAP LEMPAR) ATAU ZONK 20 DETIK
-                if fishingState == "IDLE" or (fishingState == "WAITING" and (os.time() - lastCastTime) >= 20) then
-                    fishingState = "WAITING"
-                    lastCastTime = os.time()
+            -- Jika Statusnya "Siap Lempar" ATAU "Sudah 20 Detik Menunggu"
+            if fishingState == "IDLE" or (fishingState == "WAITING" and (os.time() - lastCastTime) >= 20) then
+                fishingState = "WAITING"
+                lastCastTime = os.time()
+                
+                pcall(function()
+                    -- LANGKAH 2: OTOMATIS MEMEGANG ROD (TEKAN KEYBOARD 1)
+                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+                    task.wait(0.1)
+                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
                     
-                    pcall(function()
-                        tool:Activate() -- Cara bawaan (sering diabaikan game)
-                        
-                        -- CARA MUTLAK: Memaksa simulasi klik mouse murni
-                        if mouse1click then
-                            mouse1click() -- Jika executor support klik asli
-                        else
-                            -- Jika tidak support, gunakan VirtualUser
-                            VirtualUser:ClickButton1(Vector2.new(0,0))
-                        end
-                    end)
+                    task.wait(0.5) -- Jeda setengah detik agar rod benar-benar tergenggam di tangan karakter
                     
-                    -- Jeda sedikit agar tidak spam klik
-                    task.wait(1)
-                end
+                    -- LANGKAH 3: MELEMPAR UMPAN DENGAN KLIK APAPUN DI LAYAR
+                    local cam = workspace.CurrentCamera
+                    local screenCenter = cam.ViewportSize / 2
+                    
+                    -- Sistem melakukan simulasi klik kiri mouse tepat di tengah-tengah layar
+                    VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, true, game, 0)
+                    task.wait(0.1)
+                    VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, false, game, 0)
+                    
+                    -- Failsafe Klik: Tambahan fungsi klik langsung khusus executor (opsional jika dibutuhkan)
+                    if mouse1click then mouse1click() end
+                end)
             end
         end
     end
