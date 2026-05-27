@@ -1,11 +1,10 @@
 -- ==========================================================
--- INDO HANGOUT AUTO-FISH (MINIGAME TERKUNCI - FIX TOUCH CAST)
+-- INDO HANGOUT AUTO-FISH (MINIGAME TERKUNCI - JALUR BELAKANG)
 -- ==========================================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local VirtualUser = game:GetService("VirtualUser")
 local player = Players.LocalPlayer
 
 -- State Machine Global (Menggunakan os.clock untuk akurasi tinggi)
@@ -134,7 +133,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================================
--- 4. AUTO CAST (DIPERBAIKI KHUSUS MOBILE/DELTA)
+-- 4. AUTO CAST (SERANGAN JALUR BELAKANG & NATIVE API)
 -- ==========================================
 task.spawn(function()
     while true do
@@ -145,12 +144,10 @@ task.spawn(function()
             if not char then continue end
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             
-            -- Anti Lompat dikunci
             if humanoid and humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
             end
             
-            -- Cek Rod di tangan atau tas
             local toolInHand = char:FindFirstChildWhichIsA("Tool")
             local rodInBackpack = player.Backpack:FindFirstChildWhichIsA("Tool")
 
@@ -160,30 +157,42 @@ task.spawn(function()
                 toolInHand = char:FindFirstChildWhichIsA("Tool")
             end
 
-            -- Jika Statusnya IDLE atau nyangkut 20 Detik
             if fishingState == "IDLE" or (fishingState == "WAITING" and (os.clock() - lastCastTime) >= 20) then
                 if toolInHand then
                     fishingState = "WAITING"
                     lastCastTime = os.clock()
                     
                     pcall(function()
-                        warn(">>> [AUTO FISH] Melempar Umpan...")
+                        warn(">>> [AUTO FISH] Mengeksekusi Lemparan Jalur Belakang...")
                         
-                        -- Cari titik tengah layar dinamis
-                        local cam = workspace.CurrentCamera
-                        local midX = cam.ViewportSize.X / 2
-                        local midY = cam.ViewportSize.Y / 2
+                        -- METODE 1: Eksekusi Kasar (Native Delta API)
+                        -- Mengeksploitasi fungsi bawaan executor yang tidak bisa diblokir game
+                        if mouse1click then mouse1click() end
+                        if mouse1press and mouse1release then
+                            mouse1press()
+                            task.wait(0.5)
+                            mouse1release()
+                        end
+                        if tap then 
+                            local cam = workspace.CurrentCamera
+                            tap(Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2))
+                        end
                         
-                        -- METODE 1: Cara Bawaan (Native)
+                        -- METODE 2: Serangan RemoteEvent (Membajak Server)
+                        -- Mencari semua file pengirim data di dalam pancingan dan memaksanya menyala
+                        for _, objek in pairs(toolInHand:GetDescendants()) do
+                            if objek:IsA("RemoteEvent") then
+                                objek:FireServer()
+                                objek:FireServer("Click")
+                                objek:FireServer("Cast")
+                                objek:FireServer("Throw")
+                                -- Jika game butuh koordinat mouse, kita lempar koordinat karakter
+                                objek:FireServer(char.PrimaryPart.Position + char.PrimaryPart.CFrame.LookVector * 15)
+                            end
+                        end
+                        
+                        -- METODE 3: Paksa Activate
                         toolInHand:Activate()
-                        
-                        -- METODE 2: Simulasi Ketukan Layar Sentuh (Mobile Fix)
-                        VirtualInputManager:SendTouchTap(Vector2.new(midX, midY), game)
-                        
-                        -- METODE 3: Simulasi Tahan Layar (Untuk Power Casting)
-                        VirtualInputManager:SendMouseButtonEvent(midX, midY, 0, true, game, 0)
-                        task.wait(1.5) -- Menahan tenaga
-                        VirtualInputManager:SendMouseButtonEvent(midX, midY, 0, false, game, 0)
                         
                         warn(">>> [AUTO FISH] Menunggu Umpan Muncul...")
                         
@@ -208,9 +217,7 @@ task.spawn(function()
                             end
                         until success or (os.clock() - startTime) > 5
                         
-                        if success then
-                            warn(">>> [AUTO FISH] BERHASIL! Umpan di air.")
-                        else
+                        if not success then
                             warn(">>> [AUTO FISH] Gagal terdeteksi, mencoba ulang...")
                             fishingState = "IDLE" 
                         end
