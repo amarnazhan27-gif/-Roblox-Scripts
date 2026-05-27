@@ -173,33 +173,25 @@ task.spawn(function()
                     lastCastTime = os.time()
                     
                     pcall(function()
-                        -- LOG: Nama alat yang digunakan
-                        warn(">>> [AUTO FISH] Alat: " .. toolInHand.Name)
+                        warn(">>> [AUTO FISH] MENEMBAK SINYAL AKTIVASI (ULTIMATE FIX)...")
                         
-                        -- DEBUG: Cari Remote secara mendalam
-                        local rodRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Rod", true) 
-                        
-                        if rodRemote then
-                            warn(">>> [AUTO FISH] Resetting Server State & Throwing...")
-                            -- 1. Reset Status (Agar server tidak menganggap lemparan sebelumnya masih aktif)
-                            rodRemote:FireServer("Unequipped", nil, toolInHand)
-                            task.wait(0.2)
-                            rodRemote:FireServer("Equipped", nil, toolInHand)
-                            task.wait(0.5)
-                            
-                            -- 2. Lakukan Lemparan
-                            toolInHand:Activate()
-                            rodRemote:FireServer("Throw", nil, toolInHand)
-                            warn(">>> [AUTO FISH] Umpan telah dilempar!")
-                        else
-                            warn(">>> [AUTO FISH] Remote 'Rod' tidak ditemukan! Menggunakan klik fisik...")
-                            toolInHand:Activate()
+                        -- 1. Paksa script lokal pancingan untuk bekerja (Bypass Manual Click)
+                        if firesignal then
+                            firesignal(toolInHand.Activated)
                         end
+                        
+                        -- 2. Backup Remote & Activate
+                        local rodRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Rod", true) 
+                        if rodRemote then
+                            rodRemote:FireServer("Equipped", nil, toolInHand)
+                            task.wait(0.2)
+                            rodRemote:FireServer("Throw", nil, toolInHand)
+                        end
+                        toolInHand:Activate()
 
-                        -- Backup: Simulasi Klik untuk Emulator
+                        -- 3. Terakhir Klik Fisik
                         local x = workspace.CurrentCamera.ViewportSize.X / 2
                         local y = workspace.CurrentCamera.ViewportSize.Y * 0.35 
-
                         if mouse1click then
                             mouse1click()
                         elseif mouse1press then
@@ -211,10 +203,12 @@ task.spawn(function()
                             task.wait(0.1)
                             VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
                         end
+                        warn(">>> [AUTO FISH] Semua metode lempar telah dicoba!")
                     end)
                 end
-            elseif fishingState == "WAITING" and (os.time() - lastCastTime) >= 15 then
-                warn(">>> [AUTO FISH] Gagal cast, mencoba ulang...")
+            elseif fishingState == "WAITING" and (os.time() - lastCastTime) >= 5 then
+                -- RECOVERY CEPAT: Jika 5 detik umpan tidak muncul, langsung IDLE lagi
+                -- agar bisa mencoba melempar ulang tanpa nunggu lama.
                 fishingState = "IDLE"
             end
         end
