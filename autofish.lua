@@ -1,10 +1,11 @@
 -- ==========================================================
--- INDO HANGOUT AUTO-FISH (REVISI FINAL - FIXED JUMP & CAST)
+-- INDO HANGOUT AUTO-FISH (KODE DIKUNCI - FIX AUTO CAST SAJA)
 -- ==========================================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local VirtualUser = game:GetService("VirtualUser") -- Tambahan khusus untuk bypass klik layar
 local player = Players.LocalPlayer
 
 -- State Machine Global
@@ -59,7 +60,7 @@ button.MouseButton1Click:Connect(function()
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
             isSpacePressed = false
         end
-        -- SOLUSI 1: Kembalikan fungsi lompat normal saat bot dimatikan
+        -- Kembalikan fungsi lompat normal saat bot dimatikan
         pcall(function()
             local char = player.Character
             local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -71,7 +72,7 @@ button.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- 2. FUNGSI PELACAK INDIKATOR BAR (MURNI ASLI)
+-- 2. FUNGSI PELACAK INDIKATOR BAR (DIKUNCI)
 -- ==========================================
 local function getFishingElements()
     local playerGui = player:FindFirstChild("PlayerGui")
@@ -90,7 +91,7 @@ local function getFishingElements()
 end
 
 -- ==========================================
--- 3. LOGIKA MINIGAME (TETAP & DIJAGA KEASLIANNYA)
+-- 3. LOGIKA MINIGAME & ANTI LOMPAT (DIKUNCI)
 -- ==========================================
 RunService.Heartbeat:Connect(function()
     if not enabled then return end
@@ -134,7 +135,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================================
--- 4. SOLUSI FIX: LOOP LEMPAR UMPAN & ANTI-LOMPAT
+-- 4. LOOP LEMPAR UMPAN (HANYA INI YANG DIUBAH)
 -- ==========================================
 task.spawn(function()
     while true do
@@ -145,12 +146,12 @@ task.spawn(function()
             local tool = char and char:FindFirstChildOfClass("Tool")
             local humanoid = char and char:FindFirstChildOfClass("Humanoid")
             
-            -- SOLUSI 1: Kunci status lompat secara realtime agar karakter tidak melompat di sela-sela game
+            -- Kunci status lompat
             if humanoid and humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
             end
             
-            -- Otomatis pegang pancingan jika turun ke backpack
+            -- Otomatis pegang pancingan
             if not tool and player:FindFirstChild("Backpack") then
                 local backpackTool = player.Backpack:FindFirstChildOfClass("Tool")
                 if backpackTool then
@@ -161,34 +162,24 @@ task.spawn(function()
             end
             
             if tool then
-                -- SOLUSI 2: Deteksi tengah layar dinamis untuk lempar umpan pasti keluar
-                if fishingState == "IDLE" then
+                -- JIKA STATUS IDLE (SIAP LEMPAR) ATAU ZONK 20 DETIK
+                if fishingState == "IDLE" or (fishingState == "WAITING" and (os.time() - lastCastTime) >= 20) then
                     fishingState = "WAITING"
                     lastCastTime = os.time()
                     
                     pcall(function()
-                        tool:Activate()
-                        -- Dapatkan titik tengah layar perangkat secara akurat
-                        local cam = workspace.CurrentCamera
-                        local screenCenter = cam.ViewportSize / 2
+                        tool:Activate() -- Cara bawaan (sering diabaikan game)
                         
-                        -- Simulasi klik fisik tepat di tengah layar game
-                        VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, true, game, 0)
-                        task.wait(0.05)
-                        VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, false, game, 0)
+                        -- CARA MUTLAK: Memaksa simulasi klik mouse murni
+                        if mouse1click then
+                            mouse1click() -- Jika executor support klik asli
+                        else
+                            -- Jika tidak support, gunakan VirtualUser
+                            VirtualUser:ClickButton1(Vector2.new(0,0))
+                        end
                     end)
                     
-                -- Jarak umpan ke minigame jika 20 detik zonk
-                elseif fishingState == "WAITING" and (os.time() - lastCastTime) >= 20 then
-                    fishingState = "IDLE"
-                    pcall(function()
-                        tool:Activate()
-                        local cam = workspace.CurrentCamera
-                        local screenCenter = cam.ViewportSize / 2
-                        VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, true, game, 0)
-                        task.wait(0.05)
-                        VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, false, game, 0)
-                    end)
+                    -- Jeda sedikit agar tidak spam klik
                     task.wait(1)
                 end
             end
