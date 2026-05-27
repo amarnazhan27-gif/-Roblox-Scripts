@@ -1,5 +1,5 @@
 -- ==========================================================
--- INDO HANGOUT AUTO-FISH (MINIGAME TERKUNCI - UI HIJACKING)
+-- INDO HANGOUT AUTO-FISH (MINIGAME TERKUNCI - RAYCAST INJECTION)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -133,7 +133,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================================
--- 4. AUTO CAST (MEMBAJAK TOMBOL UI DENGAN GETCONNECTIONS)
+-- 4. AUTO CAST (SOLUSI MUTLAK - RAYCAST MOUSE INJECTION)
 -- ==========================================
 task.spawn(function()
     while true do
@@ -143,7 +143,9 @@ task.spawn(function()
             local char = player.Character
             if not char then continue end
             local humanoid = char:FindFirstChildOfClass("Humanoid")
+            local rootPart = char:FindFirstChild("HumanoidRootPart")
             
+            -- Amankan state melompat
             if humanoid then
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
             end
@@ -158,43 +160,52 @@ task.spawn(function()
             end
 
             if fishingState == "IDLE" or (fishingState == "WAITING" and (os.clock() - lastCastTime) >= 20) then
-                if toolInHand then
+                if toolInHand and rootPart then
                     fishingState = "WAITING"
                     lastCastTime = os.clock()
                     
                     pcall(function()
-                        warn(">>> [AUTO FISH] Membajak Tombol UI & Sensor...")
+                        warn(">>> [AUTO FISH] Menyuntikkan Target Koordinat 3D...")
                         
-                        -- METODE 1: Tembak Sensor Layar (UserInputService Spoofing)
-                        if getconnections then
-                            local UserInputService = game:GetService("UserInputService")
-                            
-                            -- Manipulasi seolah-olah layar disentuh
-                            for _, connection in pairs(getconnections(UserInputService.InputBegan)) do
-                                pcall(function()
-                                    connection:Fire({UserInputType = Enum.UserInputType.Touch, UserInputState = Enum.UserInputState.Begin}, false)
-                                    connection:Fire({UserInputType = Enum.UserInputType.MouseButton1, UserInputState = Enum.UserInputState.Begin}, false)
-                                end)
-                            end
-                            
-                            -- METODE 2: Membajak semua tombol UI pancingan di layar
-                            for _, guiElem in pairs(player.PlayerGui:GetDescendants()) do
-                                if (guiElem:IsA("TextButton") or guiElem:IsA("ImageButton")) and guiElem.Visible then
-                                    for _, connection in pairs(getconnections(guiElem.MouseButton1Click)) do
-                                        pcall(function() connection:Fire() end)
-                                    end
-                                    for _, connection in pairs(getconnections(guiElem.MouseButton1Down)) do
-                                        pcall(function() connection:Fire() end)
-                                    end
-                                    for _, connection in pairs(getconnections(guiElem.Activated)) do
-                                        pcall(function() connection:Fire() end)
-                                    end
+                        -- KALKULASI TARGET DEPAN KARAKTER (Bypass Deteksi Mouse Kosong)
+                        -- Membuat target tiruan sejauh 25 studs di depan karakter mengarah ke air/tanah
+                        local forwardVector = rootPart.CFrame.LookVector
+                        local targetPosition = rootPart.Position + (forwardVector * 25) - Vector3.new(0, 4, 0)
+                        local fakeCFrame = CFrame.new(targetPosition)
+                        
+                        -- MANIPULASI OBJEK MOUSE SCRIPT LOKAL
+                        -- Memaksa sistem game membaca bahwa mouse kita sedang menunjuk ke targetPosition
+                        local mouse = player:GetMouse()
+                        if hookmetamethod and namecallmethod then
+                            -- Jika eksekutor mendukung hook tingkat tinggi, kita bajak properti Hit-nya
+                            local oldIndex
+                            oldIndex = hookmetamethod(game, "__index", function(self, index)
+                                if self == mouse and (index == "Hit" or index == "hit") then
+                                    return fakeCFrame
+                                elseif self == mouse and (index == "Target" or index == "target") then
+                                    return workspace:FindFirstChildOfClass("Terrain") or workspace
                                 end
+                                return oldIndex(self, index)
+                            end)
+                        end
+                        
+                        -- METODE EKSEKUSI 1: Pemicu Utama (Suku Cadang Tool)
+                        toolInHand:Activate()
+                        
+                        -- METODE EKSEKUSI 2: Deteksi Sinyal Event Bawaan Pancingan
+                        for _, obj in pairs(toolInHand:GetDescendants()) do
+                            if obj:IsA("RemoteEvent") then
+                                obj:FireServer(targetPosition)
+                                obj:FireServer("Cast", targetPosition)
+                                obj:FireServer("Click", targetPosition)
                             end
                         end
                         
-                        -- METODE 3: Cara Bawaan (Bypass tambahan)
-                        toolInHand:Activate()
+                        -- METODE EKSEKUSI 3: Simulasi Input Hardware Tingkat Rendah (Tanpa Sentuh UI)
+                        -- Menggunakan perintah enter/klik internal roblox untuk memicu tool tanpa memicu tombol lompat mobile
+                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                        task.wait(0.1)
+                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
                         
                         warn(">>> [AUTO FISH] Menunggu Umpan Muncul...")
                         
@@ -211,7 +222,7 @@ task.spawn(function()
                             
                             for _, v in pairs(workspace:GetChildren()) do
                                 if v.Name:lower():find("bobber") or v.Name:lower():find("bait") or v.Name:lower():find("hook") or v.Name:lower():find("pancing") then
-                                    if char.PrimaryPart and (v:GetPivot().Position - char.PrimaryPart.Position).Magnitude < 100 then
+                                    if (v:GetPivot().Position - rootPart.Position).Magnitude < 100 then
                                         success = true
                                         break
                                     end
@@ -220,8 +231,10 @@ task.spawn(function()
                         until success or (os.clock() - startTime) > 5
                         
                         if not success then
-                            warn(">>> [AUTO FISH] Gagal terdeteksi, mencoba ulang...")
+                            warn(">>> [AUTO FISH] Gagal terdeteksi, mengulangi proses...")
                             fishingState = "IDLE" 
+                        else
+                            warn(">>> [AUTO FISH] BERHASIL! Umpan meluncur ke air.")
                         end
                     end)
                 end
