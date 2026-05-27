@@ -1,36 +1,30 @@
 -- ==========================================================
--- INDO HANGOUT AUTO-FISH (DELTA/ANDROID 100% TOUCH OPTIMIZED)
+-- INDO HANGOUT AUTO-FISH (VERSI RESTORE - DIKUNCI TOTAL)
 -- ==========================================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
 -- State Machine Global
 local enabled = false
-local fishingState = "IDLE" 
+local fishingState = "IDLE" -- IDLE, WAITING, MINIGAME, COOLDOWN
 local lastCastTime = 0
 local lastMinigameTime = 0
-local isScreenPressed = false -- Diganti dari isSpacePressed
-
--- Kalkulasi Tengah Layar Dinamis
-local cam = workspace.CurrentCamera
-local function getScreenCenter()
-    return Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-end
+local isSpacePressed = false -- Dikembalikan ke Space (Terbukti Sukses)
 
 -- ==========================================
--- 1. MENGAKTIFKAN TOMBOL ON/OFF 
+-- LANGKAH 1: MENGAKTIFKAN TOMBOL ON/OFF 
 -- ==========================================
 local gui = Instance.new("ScreenGui")
-gui.Name = "AutoFish_Sistematis"
+gui.Name = "AutoFish_Sistematis_Restore"
 gui.ResetOnSpawn = false
 gui.Parent = game:GetService("CoreGui")
 
 local main = Instance.new("Frame", gui)
 main.Size = UDim2.new(0, 180, 0, 90)
-main.Position = UDim2.new(1, -190, 0, 50) 
+main.Position = UDim2.new(0.5, -90, 0.8, 0)
 main.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 main.BorderSizePixel = 2
 main.BorderColor3 = Color3.fromRGB(200, 200, 200)
@@ -61,10 +55,11 @@ button.MouseButton1Click:Connect(function()
     
     if not enabled then
         fishingState = "IDLE"
-        if isScreenPressed then
-            VirtualUser:Button1Up(getScreenCenter(), cam.CFrame)
-            isScreenPressed = false
+        if isSpacePressed then
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+            isSpacePressed = false
         end
+        -- Kembalikan fungsi lompat normal saat bot dimatikan
         pcall(function()
             local char = player.Character
             local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -76,7 +71,7 @@ button.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- 2. FUNGSI PELACAK INDIKATOR BAR
+-- FUNGSI PELACAK INDIKATOR BAR (DIKUNCI)
 -- ==========================================
 local function getFishingElements()
     local playerGui = player:FindFirstChild("PlayerGui")
@@ -95,7 +90,7 @@ local function getFishingElements()
 end
 
 -- ==========================================
--- 3. MINIGAME (MENGGUNAKAN SIMULASI KLIK LAYAR)
+-- LANGKAH 4 & 5: MINIGAME & REPEAT (DIKEMBALIKAN KE VERSI SUKSES)
 -- ==========================================
 RunService.Heartbeat:Connect(function()
     if not enabled then return end
@@ -109,23 +104,22 @@ RunService.Heartbeat:Connect(function()
         local redCenter = red.AbsolutePosition.X + (red.AbsoluteSize.X / 2)
         local tolerance = white.AbsoluteSize.X * 0.1 
 
-        -- GANTI SPASI DENGAN KLIK/TAHAN LAYAR (TOUCH SIMULATION)
         if whiteCenter < (redCenter - tolerance) then
-            if not isScreenPressed then
-                VirtualUser:Button1Down(getScreenCenter(), cam.CFrame)
-                isScreenPressed = true
+            if not isSpacePressed then
+                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+                isSpacePressed = true
             end
         elseif whiteCenter > (redCenter + tolerance) then
-            if isScreenPressed then
-                VirtualUser:Button1Up(getScreenCenter(), cam.CFrame)
-                isScreenPressed = false
+            if isSpacePressed then
+                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+                isSpacePressed = false
             end
         end
         
     else
-        if isScreenPressed then
-            VirtualUser:Button1Up(getScreenCenter(), cam.CFrame)
-            isScreenPressed = false
+        if isSpacePressed then
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+            isSpacePressed = false
         end
         
         if fishingState == "MINIGAME" then
@@ -133,82 +127,56 @@ RunService.Heartbeat:Connect(function()
             lastMinigameTime = os.time()
         elseif fishingState == "COOLDOWN" then
             if os.time() - lastMinigameTime >= 1 then
-                fishingState = "IDLE" 
+                fishingState = "IDLE"
             end
         end
     end
 end)
 
 -- ==========================================
--- 4. AUTO CAST (MENGGUNAKAN KOORDINAT TENGAH LAYAR)
+-- LANGKAH 2 & 3: MEMEGANG ROD & MELEMPAR UMPAN
 -- ==========================================
 task.spawn(function()
     while true do
-        task.wait(0.5) 
+        task.wait(0.3)
         
         if enabled then
             local char = player.Character
             if not char then continue end
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             
+            -- Anti Lompat dikunci
             if humanoid and humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
             end
             
+            -- Cari Rod di tangan atau di tas
             local toolInHand = char:FindFirstChildWhichIsA("Tool")
-            local rodInBackpack = player.Backpack:FindFirstChild("Fishing Rod") or player.Backpack:FindFirstChild("Rod") or player.Backpack:FindFirstChildWhichIsA("Tool")
+            local rodInBackpack = player.Backpack:FindFirstChildWhichIsA("Tool")
 
+            -- LANGKAH 2: OTOMATIS MEMEGANG ROD
             if not toolInHand and rodInBackpack and humanoid then
                 humanoid:EquipTool(rodInBackpack)
-                task.wait(1) 
+                task.wait(0.5) -- Jeda agar rod tergenggam sempurna
                 toolInHand = char:FindFirstChildWhichIsA("Tool")
             end
 
+            -- LANGKAH 3: MELEMPAR UMPAN
             if fishingState == "IDLE" or (fishingState == "WAITING" and (os.time() - lastCastTime) >= 20) then
                 if toolInHand then
                     fishingState = "WAITING"
                     lastCastTime = os.time()
                     
                     pcall(function()
-                        warn(">>> [AUTO FISH] Menyiapkan Tenaga (Casting)...")
-                        local center = getScreenCenter()
-                        
-                        -- Pindahkan klik ke tengah layar agar tidak mengenai tombol menu Roblox
-                        VirtualUser:Button1Down(center, cam.CFrame)
-                        task.wait(1.8) 
-                        VirtualUser:Button1Up(center, cam.CFrame)
-                        
-                        -- Mengaktifkan tool secara paksa sebagai pelengkap
+                        -- Metode Bawaan Roblox (Paling Aman)
                         toolInHand:Activate()
                         
-                        warn(">>> [AUTO FISH] Menunggu Umpan Muncul...")
-                        
-                        local success = false
-                        local startTime = os.time()
-                        
-                        repeat
-                            task.wait(0.2)
-                            if fishingState == "MINIGAME" then
-                                success = true
-                                break
-                            end
-                            
-                            for _, v in pairs(workspace:GetChildren()) do
-                                if v.Name:lower():find("bobber") or v.Name:lower():find("bait") or v.Name:lower():find("hook") then
-                                    if char.PrimaryPart and (v:GetPivot().Position - char.PrimaryPart.Position).Magnitude < 80 then
-                                        success = true
-                                        break
-                                    end
-                                end
-                            end
-                        until success or (os.time() - startTime) > 5
-                        
-                        if success then
-                            warn(">>> [AUTO FISH] BERHASIL! Umpan di air.")
-                        else
-                            warn(">>> [AUTO FISH] Gagal terdeteksi, mencoba ulang...")
-                            fishingState = "IDLE" 
-                        end
+                        -- Backup Simulasi Klik Layar (Versi yang disetujui sebelumnya)
+                        local cam = workspace.CurrentCamera
+                        local screenCenter = cam.ViewportSize / 2
+                        VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, true, game, 0)
+                        task.wait(0.1)
+                        VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, false, game, 0)
                     end)
                 end
             end
