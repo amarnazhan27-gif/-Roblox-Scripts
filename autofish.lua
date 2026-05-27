@@ -1,4 +1,3 @@
-
 -- ==========================================================
 -- INDO HANGOUT AUTO-FISH (ANDROID/DELTA - FIXED)
 -- ==========================================================
@@ -175,19 +174,21 @@ task.spawn(function()
                     
                     pcall(function()
                         -- LANGKAH 3: MELEMPAR UMPAN
-                        -- Melakukan klik dua kali dengan jeda tekan (hold) untuk kepastian
-                        for i = 1, 2 do
-                            toolInHand:Activate()
-                            
-                            local x = workspace.CurrentCamera.ViewportSize.X / 2
-                            local y = workspace.CurrentCamera.ViewportSize.Y / 2
-                            
-                            VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
-                            task.wait(0.2) -- Tahan sedikit agar terbaca oleh mesin game
-                            VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
-                            
-                            task.wait(0.3) -- Jeda antar klik
+                        -- 1. Cari dan paksa tembak RemoteEvent (Solusi paling ampuh di Indo Hangout)
+                        for _, v in pairs(toolInHand:GetDescendants()) do
+                            if v:IsA("RemoteEvent") then
+                                pcall(function() v:FireServer() end)
+                            end
                         end
+
+                        -- 2. Simulasi Klik di area air (posisi 40% layar agar tidak kena badan sendiri)
+                        local x = workspace.CurrentCamera.ViewportSize.X / 2
+                        local y = workspace.CurrentCamera.ViewportSize.Y * 0.4 
+                        
+                        toolInHand:Activate()
+                        VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+                        task.wait(0.2)
+                        VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
                     end)
                 end
             end
