@@ -1,5 +1,5 @@
 -- ==========================================================
--- INDO HANGOUT AUTO-FISH (MINIGAME TERKUNCI - INTERNAL HOOK)
+-- INDO HANGOUT AUTO-FISH (MINIGAME TERKUNCI - BRUTE FORCE CAST)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -133,19 +133,19 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================================
--- 4. AUTO CAST (MANIPULASI LOGIKA INTERNAL / METHOD OVERRIDING)
+-- 4. AUTO CAST (BRUTE FORCE REMOTE & PC CLICK INJECTION)
 -- ==========================================
 task.spawn(function()
     while true do
-        task.wait(0.4) 
+        task.wait(0.5) 
         
         if enabled then
             local char = player.Character
             if not char then continue end
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             
-            -- Matikan fungsi lompat secara agresif agar tidak loncat saat bot aktif
-            if humanoid and humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
+            -- Kunci total state melompat agar tidak bisa loncat
+            if humanoid then
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
             end
             
@@ -164,36 +164,44 @@ task.spawn(function()
                     lastCastTime = os.clock()
                     
                     pcall(function()
-                        warn(">>> [AUTO FISH] Menembakkan Sinyal Internal...")
+                        warn(">>> [AUTO FISH] Memulai Lemparan Brute Force...")
                         
-                        -- STRATEGI INTERNAL 1: Memaksa aktivasi script pancingan dari memori virtual
+                        -- STRATEGI 1: Paksa Aktivasi Alat
                         toolInHand:Activate()
                         
-                        -- STRATEGI INTERNAL 2: Menembak modul koneksi fungsi kustom pancingan jika ada
-                        local localScript = toolInHand:FindFirstChildOfClass("LocalScript")
-                        if localScript and filesystem and loadstring then
-                            -- Jika eksekutor mendukung dekompilasi, kita paksa trigger event lokalnya
-                            local env = getsenv(localScript)
-                            if env then
-                                if env.Cast then env.Cast() end
-                                if env.Throw then env.Throw() end
-                                if env.onActivated then env.onActivated() end
-                                if env.Clicked then env.Clicked() end
-                            end
-                        end
+                        -- STRATEGI 2: Simulasi Input Mouse Komputer (Bypass Sensor Mobile)
+                        local cam = workspace.CurrentCamera
+                        local midX = cam.ViewportSize.X / 2
+                        local midY = cam.ViewportSize.Y / 2
                         
-                        -- STRATEGI INTERNAL 3: Rekayasa Remote Objek Bertingkat (Deep Scan)
-                        -- Melacak folder tersembunyi tempat penyimpanan jalur lempar game Indo Hangout
-                        local remotes = toolInHand:GetDescendants()
-                        for _, obj in pairs(remotes) do
+                        VirtualInputManager:SendMouseButtonEvent(midX, midY, 0, true, game, 0)
+                        task.wait(0.2)
+                        VirtualInputManager:SendMouseButtonEvent(midX, midY, 0, false, game, 0)
+                        
+                        -- STRATEGI 3: Serangan Total (Trigger Semua Remote Tanpa Pandang Bulu)
+                        local targetPos = char.PrimaryPart.Position + (char.PrimaryPart.CFrame.LookVector * 25)
+                        
+                        -- Pindai alat pancing
+                        for _, obj in pairs(toolInHand:GetDescendants()) do
                             if obj:IsA("RemoteEvent") then
-                                -- Kirim parameter umpan kosong, string, dan posisi koordinat tanah di depan karakter
-                                local targetPos = char.PrimaryPart.Position + (char.PrimaryPart.CFrame.LookVector * 20)
                                 obj:FireServer()
                                 obj:FireServer(true)
                                 obj:FireServer(targetPos)
                                 obj:FireServer("Cast", targetPos)
-                                obj:FireServer("ThrowBait")
+                                obj:FireServer("Throw")
+                            end
+                        end
+                        
+                        -- Pindai juga ReplicatedStorage (Tempat folder event utama game disimpan)
+                        for _, folder in pairs(game:GetService("ReplicatedStorage"):GetChildren()) do
+                            if folder:IsA("Folder") and (folder.Name:lower():find("fish") or folder.Name:lower():find("event") or folder.Name:lower():find("remotes")) then
+                                for _, remote in pairs(folder:GetDescendants()) do
+                                    if remote:IsA("RemoteEvent") then
+                                        remote:FireServer()
+                                        remote:FireServer(targetPos)
+                                        remote:FireServer("Cast")
+                                    end
+                                end
                             end
                         end
                         
@@ -210,7 +218,6 @@ task.spawn(function()
                                 break
                             end
                             
-                            -- Deteksi Bobber/Umpan di Workspace
                             for _, v in pairs(workspace:GetChildren()) do
                                 if v.Name:lower():find("bobber") or v.Name:lower():find("bait") or v.Name:lower():find("hook") or v.Name:lower():find("pancing") then
                                     if char.PrimaryPart and (v:GetPivot().Position - char.PrimaryPart.Position).Magnitude < 100 then
@@ -222,10 +229,8 @@ task.spawn(function()
                         until success or (os.clock() - startTime) > 5
                         
                         if not success then
-                            warn(">>> [AUTO FISH] Gagal mendeteksi umpan, mereset status...")
+                            warn(">>> [AUTO FISH] Umpan belum keluar, otomatis memicu ulang...")
                             fishingState = "IDLE" 
-                        else
-                            warn(">>> [AUTO FISH] BERHASIL! Umpan telah terpasang di air.")
                         end
                     end)
                 end
