@@ -1,5 +1,5 @@
 -- ==========================================================
--- INDO HANGOUT AUTO-FISH (V7 - PERFECT STATE MACHINE)
+-- INDO HANGOUT AUTO-FISH (V8 - THE ULTIMATE UNIFIED SCRIPT)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -7,17 +7,18 @@ local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
--- State Management global yang sinkron
+-- State Machine Global (Aman & Sinkron)
 local enabled = false
 local fishingState = "IDLE" -- IDLE, WAITING, MINIGAME, COOLDOWN
-local lastStateChange = os.clock()
+local lastCastTime = 0
+local lastMinigameTime = 0
 local isSpacePressed = false
 
 -- ==========================================
--- 1. KONTROL INTERFACE (GUI CORE)
+-- 1. GUI KONTROL INTERFACE
 -- ==========================================
 local gui = Instance.new("ScreenGui")
-gui.Name = "AutoFish_V7_Final"
+gui.Name = "AutoFish_V8_Unified"
 gui.ResetOnSpawn = false
 gui.Parent = game:GetService("CoreGui")
 
@@ -33,7 +34,7 @@ main.Draggable = true
 local title = Instance.new("TextLabel", main)
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundTransparency = 1
-title.Text = "AUTO FISH V7"
+title.Text = "AUTO FISH V8"
 title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.Code
 title.TextScaled = true
@@ -47,33 +48,24 @@ button.Font = Enum.Font.GothamBold
 button.TextScaled = true
 button.TextColor3 = Color3.new(1, 1, 1)
 
-local function changeState(newState)
-    fishingState = newState
-    lastStateChange = os.clock()
-end
-
 button.MouseButton1Click:Connect(function()
     enabled = not enabled
     button.Text = enabled and "ON" or "OFF"
     button.BackgroundColor3 = enabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
     
     if not enabled then
-        changeState("IDLE")
+        fishingState = "IDLE"
         if isSpacePressed then
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
             isSpacePressed = false
         end
-        -- Kembalikan fungsi lompat jika bot dimatikan
-        pcall(function()
-            local char = player.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true) end
-        end)
+    else
+        fishingState = "IDLE"
     end
 end)
 
 -- ==========================================
--- 2. DETEKTOR KORDINAT VISUAL BAR
+-- 2. FUNGSI PELACAK INDIKATOR BAR (MILIK ANDA)
 -- ==========================================
 local function getFishingElements()
     local playerGui = player:FindFirstChild("PlayerGui")
@@ -92,19 +84,20 @@ local function getFishingElements()
 end
 
 -- ==========================================
--- 3. LOGIKA TRACKING MINIGAME (SINKRON & ANTI-LAG)
+-- 3. INTERFASI HEARTBEAT (100% ANTI-YIELD / ANTI-LOMPAT)
 -- ==========================================
 RunService.Heartbeat:Connect(function()
     if not enabled then return end
 
     local white, red = getFishingElements()
 
-    -- JIKA MINIGAME AKTIF (UI Terlihat di Layar)
+    -- JIKA UI MINIGAME MUNCUL (Bermain Minigame)
     if white and red and white.Visible then
         fishingState = "MINIGAME"
         
         local whiteCenter = white.AbsolutePosition.X + (white.AbsoluteSize.X / 2)
         local redCenter = red.AbsolutePosition.X + (red.AbsoluteSize.X / 2)
+        -- Toleransi jarak 10% sesuai kodingan sukses Anda
         local tolerance = white.AbsoluteSize.X * 0.1 
 
         if whiteCenter < (redCenter - tolerance) then
@@ -121,55 +114,73 @@ RunService.Heartbeat:Connect(function()
         
     -- JIKA UI MINIGAME TIDAK ADA DI LAYAR
     else
-        -- Failsafe utama: Pastikan spasi langsung dilepas detik ini juga
+        -- Proteksi Instant: Lepas spasi detik ini juga agar TIDAK LOMPAT
         if isSpacePressed then
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
             isSpacePressed = false
         end
         
-        -- Transisi State Otomatis tanpa merusak thread
+        -- Manajemen Transisi State Berbasis Waktu Mikro (Aman dari Bug Thread)
         if fishingState == "MINIGAME" then
-            changeState("COOLDOWN") -- Masuk masa jeda sejenak setelah menang
+            fishingState = "COOLDOWN"
+            lastMinigameTime = os.time()
         elseif fishingState == "COOLDOWN" then
-            if (os.clock() - lastStateChange) > 1.5 then 
-                changeState("IDLE") -- Setelah 1.5 detik animasi selesai, siap lempar lagi
+            -- Jeda 2 detik setelah minigame menghilang agar animasi selesai, lalu kembali ke IDLE
+            if os.time() - lastMinigameTime >= 2 then
+                fishingState = "IDLE"
             end
         end
     end
 end)
 
 -- ==========================================
--- 4. LOOP OTOMATIS LEMPAR UMPAN & FAILSAFE 20s
+-- 4. LOOP SEPARASI OTOMATIS LEMPAR & RECAST (20 DETIK)
 -- ==========================================
 task.spawn(function()
     while true do
-        task.wait(0.3) -- Pengecekan intensif berkala cepat
+        task.wait(0.5) -- Cek berkala secara stabil setiap setengah detik
         
         if enabled then
             local char = player.Character
             local tool = char and char:FindFirstChildOfClass("Tool")
-            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
             
-            -- PROTEKSI TOTAL: Kunci pergerakan lompat agar tidak melompat saat spasi ditekan bot
-            if humanoid then
-                if humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+            -- Otomatis ambil pancingan dari tas jika belum dipegang
+            if not tool and player:FindFirstChild("Backpack") then
+                local backpackTool = player.Backpack:FindFirstChildOfClass("Tool")
+                if backpackTool then
+                    backpackTool.Parent = char
+                    task.wait(0.3)
+                    tool = backpackTool
                 end
             end
             
             if tool then
-                -- JIKA READY (IDLE): Langsung lempar pancingan
+                -- TAHAP TEPAT: JIKA STATUS IDLE, LEMPAR UMPAN!
                 if fishingState == "IDLE" then
-                    changeState("WAITING")
+                    fishingState = "WAITING"
+                    lastCastTime = os.time()
+                    print("[Auto-Fish] Melempar umpan otomatis...")
+                    
                     pcall(function()
                         tool:Activate()
+                        -- Simulasi klik fisik di tengah layar untuk memicu pancingan custom
+                        VirtualInputManager:SendMouseButtonEvent(200, 200, 0, true, game, 0)
+                        task.wait(0.1)
+                        VirtualInputManager:SendMouseButtonEvent(200, 200, 0, false, game, 0)
                     end)
-                    print("[Auto-Fish] Umpan berhasil dilempar otomatis!")
-                
-                -- JIKA MENUNGGU (WAITING) DAN MATANG 20 DETIK: Tarik paksa / Re-cast
-                elseif fishingState == "WAITING" and (os.clock() - lastStateChange) >= 20 then
-                    changeState("IDLE")
-                    print("[Auto-Fish] Batas 20 detik tercapai tanpa gigitan. Melakukan recast paksa!")
+                    
+                -- TAHAP FAILSAFE: JIKA SUDAH 20 DETIK TANPA GIGITAN, RECAST!
+                elseif fishingState == "WAITING" and (os.time() - lastCastTime) >= 20 then
+                    fishingState = "IDLE"
+                    print("[Auto-Fish] Jarak umpan mencapai 20 detik. Tarik paksa dan lempar ulang!")
+                    
+                    pcall(function()
+                        tool:Activate() -- Tarik pancingan kembali
+                        VirtualInputManager:SendMouseButtonEvent(200, 200, 0, true, game, 0)
+                        task.wait(0.1)
+                        VirtualInputManager:SendMouseButtonEvent(200, 200, 0, false, game, 0)
+                    end)
+                    task.wait(1.5) -- Beri waktu jeda tarikan sebelum masuk ke loop lempar berikutnya
                 end
             end
         end
