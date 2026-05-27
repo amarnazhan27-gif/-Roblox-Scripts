@@ -1,5 +1,5 @@
 -- ==========================================================
--- INDO HANGOUT AUTO-FISH (MINIGAME TERKUNCI - JALUR BELAKANG)
+-- INDO HANGOUT AUTO-FISH (MINIGAME TERKUNCI - INTERNAL HOOK)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -133,17 +133,18 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================================
--- 4. AUTO CAST (SERANGAN JALUR BELAKANG & NATIVE API)
+-- 4. AUTO CAST (MANIPULASI LOGIKA INTERNAL / METHOD OVERRIDING)
 -- ==========================================
 task.spawn(function()
     while true do
-        task.wait(0.5) 
+        task.wait(0.4) 
         
         if enabled then
             local char = player.Character
             if not char then continue end
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             
+            -- Matikan fungsi lompat secara agresif agar tidak loncat saat bot aktif
             if humanoid and humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
             end
@@ -153,7 +154,7 @@ task.spawn(function()
 
             if not toolInHand and rodInBackpack and humanoid then
                 humanoid:EquipTool(rodInBackpack)
-                task.wait(1) 
+                task.wait(0.8) 
                 toolInHand = char:FindFirstChildWhichIsA("Tool")
             end
 
@@ -163,36 +164,38 @@ task.spawn(function()
                     lastCastTime = os.clock()
                     
                     pcall(function()
-                        warn(">>> [AUTO FISH] Mengeksekusi Lemparan Jalur Belakang...")
+                        warn(">>> [AUTO FISH] Menembakkan Sinyal Internal...")
                         
-                        -- METODE 1: Eksekusi Kasar (Native Delta API)
-                        -- Mengeksploitasi fungsi bawaan executor yang tidak bisa diblokir game
-                        if mouse1click then mouse1click() end
-                        if mouse1press and mouse1release then
-                            mouse1press()
-                            task.wait(0.5)
-                            mouse1release()
-                        end
-                        if tap then 
-                            local cam = workspace.CurrentCamera
-                            tap(Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2))
-                        end
+                        -- STRATEGI INTERNAL 1: Memaksa aktivasi script pancingan dari memori virtual
+                        toolInHand:Activate()
                         
-                        -- METODE 2: Serangan RemoteEvent (Membajak Server)
-                        -- Mencari semua file pengirim data di dalam pancingan dan memaksanya menyala
-                        for _, objek in pairs(toolInHand:GetDescendants()) do
-                            if objek:IsA("RemoteEvent") then
-                                objek:FireServer()
-                                objek:FireServer("Click")
-                                objek:FireServer("Cast")
-                                objek:FireServer("Throw")
-                                -- Jika game butuh koordinat mouse, kita lempar koordinat karakter
-                                objek:FireServer(char.PrimaryPart.Position + char.PrimaryPart.CFrame.LookVector * 15)
+                        -- STRATEGI INTERNAL 2: Menembak modul koneksi fungsi kustom pancingan jika ada
+                        local localScript = toolInHand:FindFirstChildOfClass("LocalScript")
+                        if localScript and filesystem and loadstring then
+                            -- Jika eksekutor mendukung dekompilasi, kita paksa trigger event lokalnya
+                            local env = getsenv(localScript)
+                            if env then
+                                if env.Cast then env.Cast() end
+                                if env.Throw then env.Throw() end
+                                if env.onActivated then env.onActivated() end
+                                if env.Clicked then env.Clicked() end
                             end
                         end
                         
-                        -- METODE 3: Paksa Activate
-                        toolInHand:Activate()
+                        -- STRATEGI INTERNAL 3: Rekayasa Remote Objek Bertingkat (Deep Scan)
+                        -- Melacak folder tersembunyi tempat penyimpanan jalur lempar game Indo Hangout
+                        local remotes = toolInHand:GetDescendants()
+                        for _, obj in pairs(remotes) do
+                            if obj:IsA("RemoteEvent") then
+                                -- Kirim parameter umpan kosong, string, dan posisi koordinat tanah di depan karakter
+                                local targetPos = char.PrimaryPart.Position + (char.PrimaryPart.CFrame.LookVector * 20)
+                                obj:FireServer()
+                                obj:FireServer(true)
+                                obj:FireServer(targetPos)
+                                obj:FireServer("Cast", targetPos)
+                                obj:FireServer("ThrowBait")
+                            end
+                        end
                         
                         warn(">>> [AUTO FISH] Menunggu Umpan Muncul...")
                         
@@ -207,9 +210,10 @@ task.spawn(function()
                                 break
                             end
                             
+                            -- Deteksi Bobber/Umpan di Workspace
                             for _, v in pairs(workspace:GetChildren()) do
-                                if v.Name:lower():find("bobber") or v.Name:lower():find("bait") or v.Name:lower():find("hook") then
-                                    if char.PrimaryPart and (v:GetPivot().Position - char.PrimaryPart.Position).Magnitude < 80 then
+                                if v.Name:lower():find("bobber") or v.Name:lower():find("bait") or v.Name:lower():find("hook") or v.Name:lower():find("pancing") then
+                                    if char.PrimaryPart and (v:GetPivot().Position - char.PrimaryPart.Position).Magnitude < 100 then
                                         success = true
                                         break
                                     end
@@ -218,8 +222,10 @@ task.spawn(function()
                         until success or (os.clock() - startTime) > 5
                         
                         if not success then
-                            warn(">>> [AUTO FISH] Gagal terdeteksi, mencoba ulang...")
+                            warn(">>> [AUTO FISH] Gagal mendeteksi umpan, mereset status...")
                             fishingState = "IDLE" 
+                        else
+                            warn(">>> [AUTO FISH] BERHASIL! Umpan telah terpasang di air.")
                         end
                     end)
                 end
