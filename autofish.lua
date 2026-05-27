@@ -173,32 +173,60 @@ task.spawn(function()
                     lastCastTime = os.time()
                     
                     pcall(function()
-                        local rodRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Rod", true) 
+                        warn(">>> [AUTO FISH] Menahan tombol (Charging Power 2 Detik)...")
+                        local x = workspace.CurrentCamera.ViewportSize.X / 2
+                        local y = workspace.CurrentCamera.ViewportSize.Y * 0.4
                         
+                        -- 1. Tekan & Tahan (Hold)
+                        VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+                        task.wait(2) -- Mengisi tenaga lemparan
+                        
+                        -- 2. Lepas (Release)
+                        VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+                        toolInHand:Activate()
+                        
+                        -- 3. Sinyal Remote (Backup)
+                        local rodRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Rod", true)
                         if rodRemote then
-                            -- Sinyal satu kali agar server tahu kita melempar (Pola asli game)
                             rodRemote:FireServer("Equipped", nil, toolInHand)
                             task.wait(0.2)
                             rodRemote:FireServer("Throw", nil, toolInHand)
                         end
                         
-                        -- Memicu animasi lemparan secara lokal
-                        toolInHand:Activate()
-
-                        -- Simulasi klik fisik sebagai pelengkap
-                        local x = workspace.CurrentCamera.ViewportSize.X / 2
-                        local y = workspace.CurrentCamera.ViewportSize.Y * 0.35 
-                        if mouse1click then
-                            mouse1click()
+                        warn(">>> [AUTO FISH] Menunggu Umpan Muncul di Air...")
+                        
+                        -- 4. DETEKSI UMPAN (Pengecekan Cepat agar tidak bengong)
+                        local success = false
+                        for i = 1, 15 do -- Scan selama 3 detik (15 x 0.2s)
+                            task.wait(0.2)
+                            
+                            -- PROTEKSI: Jika minigame sudah mulai, berhenti scan!
+                            if fishingState == "MINIGAME" then
+                                success = true
+                                break
+                            end
+                            
+                            for _, v in pairs(workspace:GetChildren()) do
+                                -- Mencari objek umpan di dekat player
+                                if (v.Name:find("Bobber") or v.Name:find("Bait") or v.Name:find("Lure") or v.Name:find("Hook") or v:FindFirstChild("Hook")) 
+                                and (v:IsA("BasePart") or v:IsA("Model")) 
+                                and (v:GetPivot().Position - char.PrimaryPart.Position).Magnitude < 100 then
+                                    success = true
+                                    break
+                                end
+                            end
+                            if success then break end
+                        end
+                        
+                        if success then
+                            warn(">>> [AUTO FISH] UMPAN TERDETEKSI! Menunggu Ikan...")
                         else
-                            VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
-                            task.wait(0.1)
-                            VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+                            warn(">>> [AUTO FISH] Umpan Gagal Muncul! Melempar ulang...")
+                            fishingState = "IDLE" -- Retriger segera
                         end
                     end)
                 end
             elseif fishingState == "WAITING" and (os.time() - lastCastTime) >= 20 then
-                -- Balik ke 20 detik agar tidak membatalkan pancingan yang sedang berjalan
                 fishingState = "IDLE"
             end
         end
