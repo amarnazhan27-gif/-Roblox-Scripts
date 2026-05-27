@@ -1,5 +1,5 @@
 -- ==========================================================
--- INDO HANGOUT AUTO-FISH (MINIGAME TERKUNCI - BRUTE FORCE CAST)
+-- INDO HANGOUT AUTO-FISH (MINIGAME TERKUNCI - UI HIJACKING)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -7,7 +7,7 @@ local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
--- State Machine Global (Menggunakan os.clock untuk akurasi tinggi)
+-- State Machine Global
 local enabled = false
 local fishingState = "IDLE" 
 local lastCastTime = os.clock()
@@ -89,7 +89,7 @@ local function getFishingElements()
 end
 
 -- ==========================================
--- 3. MINIGAME LOGIC (DIKUNCI - TERBUKTI BERHASIL)
+-- 3. MINIGAME LOGIC (DIKUNCI)
 -- ==========================================
 RunService.Heartbeat:Connect(function()
     if not enabled then return end
@@ -133,7 +133,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================================
--- 4. AUTO CAST (BRUTE FORCE REMOTE & PC CLICK INJECTION)
+-- 4. AUTO CAST (MEMBAJAK TOMBOL UI DENGAN GETCONNECTIONS)
 -- ==========================================
 task.spawn(function()
     while true do
@@ -144,7 +144,6 @@ task.spawn(function()
             if not char then continue end
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             
-            -- Kunci total state melompat agar tidak bisa loncat
             if humanoid then
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
             end
@@ -164,46 +163,38 @@ task.spawn(function()
                     lastCastTime = os.clock()
                     
                     pcall(function()
-                        warn(">>> [AUTO FISH] Memulai Lemparan Brute Force...")
+                        warn(">>> [AUTO FISH] Membajak Tombol UI & Sensor...")
                         
-                        -- STRATEGI 1: Paksa Aktivasi Alat
-                        toolInHand:Activate()
-                        
-                        -- STRATEGI 2: Simulasi Input Mouse Komputer (Bypass Sensor Mobile)
-                        local cam = workspace.CurrentCamera
-                        local midX = cam.ViewportSize.X / 2
-                        local midY = cam.ViewportSize.Y / 2
-                        
-                        VirtualInputManager:SendMouseButtonEvent(midX, midY, 0, true, game, 0)
-                        task.wait(0.2)
-                        VirtualInputManager:SendMouseButtonEvent(midX, midY, 0, false, game, 0)
-                        
-                        -- STRATEGI 3: Serangan Total (Trigger Semua Remote Tanpa Pandang Bulu)
-                        local targetPos = char.PrimaryPart.Position + (char.PrimaryPart.CFrame.LookVector * 25)
-                        
-                        -- Pindai alat pancing
-                        for _, obj in pairs(toolInHand:GetDescendants()) do
-                            if obj:IsA("RemoteEvent") then
-                                obj:FireServer()
-                                obj:FireServer(true)
-                                obj:FireServer(targetPos)
-                                obj:FireServer("Cast", targetPos)
-                                obj:FireServer("Throw")
+                        -- METODE 1: Tembak Sensor Layar (UserInputService Spoofing)
+                        if getconnections then
+                            local UserInputService = game:GetService("UserInputService")
+                            
+                            -- Manipulasi seolah-olah layar disentuh
+                            for _, connection in pairs(getconnections(UserInputService.InputBegan)) do
+                                pcall(function()
+                                    connection:Fire({UserInputType = Enum.UserInputType.Touch, UserInputState = Enum.UserInputState.Begin}, false)
+                                    connection:Fire({UserInputType = Enum.UserInputType.MouseButton1, UserInputState = Enum.UserInputState.Begin}, false)
+                                end)
                             end
-                        end
-                        
-                        -- Pindai juga ReplicatedStorage (Tempat folder event utama game disimpan)
-                        for _, folder in pairs(game:GetService("ReplicatedStorage"):GetChildren()) do
-                            if folder:IsA("Folder") and (folder.Name:lower():find("fish") or folder.Name:lower():find("event") or folder.Name:lower():find("remotes")) then
-                                for _, remote in pairs(folder:GetDescendants()) do
-                                    if remote:IsA("RemoteEvent") then
-                                        remote:FireServer()
-                                        remote:FireServer(targetPos)
-                                        remote:FireServer("Cast")
+                            
+                            -- METODE 2: Membajak semua tombol UI pancingan di layar
+                            for _, guiElem in pairs(player.PlayerGui:GetDescendants()) do
+                                if (guiElem:IsA("TextButton") or guiElem:IsA("ImageButton")) and guiElem.Visible then
+                                    for _, connection in pairs(getconnections(guiElem.MouseButton1Click)) do
+                                        pcall(function() connection:Fire() end)
+                                    end
+                                    for _, connection in pairs(getconnections(guiElem.MouseButton1Down)) do
+                                        pcall(function() connection:Fire() end)
+                                    end
+                                    for _, connection in pairs(getconnections(guiElem.Activated)) do
+                                        pcall(function() connection:Fire() end)
                                     end
                                 end
                             end
                         end
+                        
+                        -- METODE 3: Cara Bawaan (Bypass tambahan)
+                        toolInHand:Activate()
                         
                         warn(">>> [AUTO FISH] Menunggu Umpan Muncul...")
                         
@@ -229,7 +220,7 @@ task.spawn(function()
                         until success or (os.clock() - startTime) > 5
                         
                         if not success then
-                            warn(">>> [AUTO FISH] Umpan belum keluar, otomatis memicu ulang...")
+                            warn(">>> [AUTO FISH] Gagal terdeteksi, mencoba ulang...")
                             fishingState = "IDLE" 
                         end
                     end)
