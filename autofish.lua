@@ -1,45 +1,48 @@
 -- ==========================================================
--- INDO HANGOUT AUTO-FISH (V4 - THE PERFECT REVERT)
+-- INDO HANGOUT AUTO-FISH (V6 - ULTIMATE TRACKER & AUTO-CAST)
 -- ==========================================================
 
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local VirtualUser = game:GetService("VirtualUser")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local randomGuiName = "IH_UI_" .. tostring(math.random(100000, 999999))
-local autoFishEnabled = false
+-- Variabel Status
+local enabled = false
 local fishingState = "IDLE"
+local isSpacePressed = false
+local lastCastTime = 0
 
 -- ==========================================
--- 1. GUI KONTROL (INSTAN)
+-- 1. GUI KONTROL
 -- ==========================================
 local gui = Instance.new("ScreenGui")
-gui.Name = randomGuiName
+gui.Name = "AutoFish_V6"
 gui.ResetOnSpawn = false
-gui.Parent = playerGui
+gui.Parent = game:GetService("CoreGui")
 
-local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0, 160, 0, 70)
-frame.Position = UDim2.new(0.5, -80, 0.8, 0)
-frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-frame.BorderSizePixel = 2
-frame.BorderColor3 = Color3.fromRGB(200, 200, 200)
-frame.Active = true
-frame.Draggable = true
+local main = Instance.new("Frame", gui)
+main.Size = UDim2.new(0, 180, 0, 90)
+main.Position = UDim2.new(0.5, -90, 0.8, 0)
+main.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+main.BorderSizePixel = 2
+main.BorderColor3 = Color3.fromRGB(200, 200, 200)
+main.Active = true
+main.Draggable = true 
 
-local title = Instance.new("TextLabel", frame)
-title.Size = UDim2.new(1, 0, 0, 20)
+local title = Instance.new("TextLabel", main)
+title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundTransparency = 1
-title.Text = "AUTO FISH (V4 FIXED)"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Text = "AUTO FISH V6"
+title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.Code
-title.TextSize = 13
+title.TextScaled = true
 
-local button = Instance.new("TextButton", frame)
-button.Size = UDim2.new(0, 140, 0, 35)
-button.Position = UDim2.new(0.5, -70, 0, 25)
+local button = Instance.new("TextButton", main)
+button.Size = UDim2.new(0.9, 0, 0, 40)
+button.Position = UDim2.new(0.05, 0, 0.45, 0)
 button.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 button.Text = "OFF"
 button.Font = Enum.Font.GothamBold
@@ -47,13 +50,20 @@ button.TextScaled = true
 button.TextColor3 = Color3.new(1, 1, 1)
 
 button.MouseButton1Click:Connect(function()
-    autoFishEnabled = not autoFishEnabled
-    button.Text = autoFishEnabled and "ON (FISHING...)" or "OFF"
-    button.BackgroundColor3 = autoFishEnabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
-    if not autoFishEnabled then fishingState = "IDLE" end
+    enabled = not enabled
+    button.Text = enabled and "ON (FISHING...)" or "OFF"
+    button.BackgroundColor3 = enabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
+    
+    if not enabled then
+        fishingState = "IDLE"
+        if isSpacePressed then
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+            isSpacePressed = false
+        end
+    end
 end)
 
--- Anti-AFK agar tidak di-kick server
+-- Anti-AFK
 player.Idled:Connect(function()
     pcall(function()
         VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
@@ -65,77 +75,94 @@ end)
 player:SetAttribute("DisableFishingAnimation", true)
 
 -- ==========================================
--- 2. DETEKSI MINIGAME (ANTI-BUTA) & BYPASS
+-- 2. FUNGSI PELACAK GUI MINIGAME
 -- ==========================================
-task.spawn(function()
-    -- WaitForChild tanpa batas waktu memastikan skrip TERUS MENCARI sampai dapat, tidak akan gagal/buta
-    local events = ReplicatedStorage:WaitForChild("Events", 9e9)
-    local remoteEvent = events:WaitForChild("RemoteEvent", 9e9)
-    local rodEvent = remoteEvent:WaitForChild("Rod", 9e9)
+local function getFishingElements()
+    for _, v in pairs(playerGui:GetDescendants()) do
+        if v.Name == "WhiteBar" and v:IsA("GuiObject") then
+            local parent = v.Parent
+            local red = parent and parent:FindFirstChild("RedBar")
+            if red and red:IsA("GuiObject") then
+                return v, red
+            end
+        end
+    end
+    return nil, nil
+end
 
-    print("[Auto-Fish] Jalur Server Ditemukan! Siap mendeteksi ikan.")
+-- ==========================================
+-- 3. LOGIKA TRACKING (MINIGAME PLAYER)
+-- ==========================================
+RunService.Heartbeat:Connect(function()
+    if not enabled then return end
 
-    rodEvent.OnClientEvent:Connect(function(action, rodName)
-        -- Jika event yang ditangkap adalah "StartReeling" (minigame dimulai)
-        if autoFishEnabled and action == "StartReeling" then
-            fishingState = "REELING"
-            print("[Auto-Fish] Ikan menyambar! Menunggu 2-3 detik...")
+    local success, err = pcall(function()
+        local white, red = getFishingElements()
+
+        -- Jika UI Minigame tidak ada di layar
+        if not white or not red or not white.Visible then
+            if isSpacePressed then
+                if keyrelease then keyrelease(0x20) else VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game) end
+                isSpacePressed = false
+            end
             
-            -- Waktu tunggu yang pas, meniru jeda manusia (seperti yang "tadi bisa")
-            task.wait(math.random(20, 35) / 10)
-            
-            if autoFishEnabled then
-                -- BYPASS: Langsung kirim sinyal "Berhasil" ke server
-                pcall(function()
-                    rodEvent:FireServer("Catch", true, rodName)
-                    print("[Auto-Fish] Tangkapan sukses dikirim!")
-                end)
-                
-                -- Menutup GUI minigame bawaan agar layar tidak penuh
-                task.wait(0.5)
-                pcall(function()
-                    for _, v in pairs(playerGui:GetChildren()) do
-                        if v:FindFirstChild("MainFrame") and v.MainFrame:FindFirstChild("Frame") then
-                            v.Enabled = false
-                        end
-                    end
-                end)
-                
-                task.wait(2) 
-                fishingState = "IDLE" -- Reset untuk lempar umpan lagi
+            -- Set status kembali ke IDLE jika minigame selesai
+            if fishingState == "REELING" then
+                task.wait(1) -- Jeda setelah tangkapan sukses
+                fishingState = "IDLE"
+            end
+            return
+        end
+
+        -- Jika UI Minigame Muncul, set status ke REELING
+        fishingState = "REELING"
+        lastCastTime = os.time() -- Reset timer failsafe saat main minigame
+
+        local whiteCenter = white.AbsolutePosition.X + (white.AbsoluteSize.X / 2)
+        local redCenter = red.AbsolutePosition.X + (red.AbsoluteSize.X / 2)
+        local tolerance = white.AbsoluteSize.X * 0.1 
+
+        if whiteCenter < (redCenter - tolerance) then
+            if not isSpacePressed then
+                if keypress then keypress(0x20) else VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game) end
+                isSpacePressed = true
+            end
+        elseif whiteCenter > (redCenter + tolerance) then
+            if isSpacePressed then
+                if keyrelease then keyrelease(0x20) else VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game) end
+                isSpacePressed = false
             end
         end
     end)
 end)
 
 -- ==========================================
--- 3. AUTO CAST (DENGAN FAILSAFE 20 DETIK)
+-- 4. LOOP AUTO-CAST & FAILSAFE 20 DETIK
 -- ==========================================
 task.spawn(function()
     while true do
-        task.wait(1) 
+        task.wait(1)
         
-        if autoFishEnabled and fishingState == "IDLE" then
+        if enabled then
             local char = player.Character
-            if char then
-                local tool = char:FindFirstChildOfClass("Tool")
-                if tool then
-                    fishingState = "WAITING"
-                    print("[Auto-Fish] Melempar umpan...")
-                    
-                    pcall(function()
-                        tool:Activate()
-                    end)
-                    
-                    -- Failsafe 20 Detik (Sesuai pesanan sebelumnya)
-                    task.spawn(function()
-                        task.wait(20)
-                        if fishingState == "WAITING" and autoFishEnabled then
-                            fishingState = "IDLE"
-                            print("[Auto-Fish] 20 detik habis, tarik paksa untuk lempar ulang.")
-                        end
-                    end)
-                end
+            local tool = char and char:FindFirstChildOfClass("Tool")
+            
+            -- Jika sedang menganggur (tidak main minigame) dan pancingan dipegang
+            if fishingState == "IDLE" and tool then
+                fishingState = "WAITING"
+                lastCastTime = os.time()
+                
+                -- Melempar umpan
+                pcall(function()
+                    tool:Activate()
+                end)
+                print("[Auto-Fish] Melempar umpan...")
+            end
+            
+            -- Failsafe: Jika menunggu ikan lebih dari 20 detik, reset ke IDLE agar melempar ulang
+            if fishingState == "WAITING" and (os.time() - lastCastTime) >= 20 then
+                fishingState = "IDLE"
+                print("[Auto-Fish] Ikan tidak makan selama 20 detik. Reset lemparan!")
             end
         end
     end
