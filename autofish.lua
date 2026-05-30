@@ -1,17 +1,43 @@
 -- ==========================================================
 -- INDO HANGOUT ALL-IN-ONE: AUTO FISH + AUTO MINE CRYSTAL
--- ANDROID/DELTA COMPATIBLE - v4.0 SMART MINIGAME
+-- ANDROID/DELTA/COMPATIBLE - v5.0 STABLE & OPTIMIZED
 -- ==========================================================
--- SOLUSI MINIGAME:
---   - Masuk minigame TEPAT di 15 detik
---   - Selama minigame: kontrol Space berdasarkan bar GUI
---   - Selesai minigame: deteksi dari GUI MENGHILANG (bukan timer)
---   - Fallback timer 15 detik dari start minigame (max timeout)
--- SOLUSI INDIKATOR:
---   - setFishPhase(0) selalu reset semua dots ke abu-abu
---   - Tombol OFF juga paksa reset semua dots
+-- PERBAIKAN UTAMA v5.0:
+--   1. ANTI-MULTI RUN CLEANUP: 
+--      Menutup dan menghentikan semua koneksi/loop dari script lama 
+--      yang masih berjalan di background agar tidak bentrok.
+--   2. RECURSIVE VISIBILITY CHECK:
+--      Mencegah script membaca GUI lama yang sudah tidak aktif (tapi masih ada di PlayerGui).
+--      Memastikan minigame ke-2 dan seterusnya 100% akurat mengikuti garis merah.
+--   3. INSTANT GUI-DISAPPEARED DETECTION:
+--      Mendeteksi kapanpun minigame selesai (8s, 10s, 12s) secara instan saat GUI menghilang,
+--      lalu langsung recast tanpa menunggu timeout.
+--   4. RESET INDIKATOR BERSIH:
+--      Semua dots langsung mati (abu-abu) saat fishing dimatikan.
 -- ==========================================================
 
+-- ==========================================================
+-- INSTANCE CLEANUP (ANTI-MULTI RUN)
+-- ==========================================================
+if shared.IH_Instance then
+    pcall(shared.IH_Instance.Clean)
+end
+
+local InstanceManager = { Connections = {}, Active = true }
+
+function InstanceManager.Clean()
+    InstanceManager.Active = false
+    for _, conn in ipairs(InstanceManager.Connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    table.clear(InstanceManager.Connections)
+end
+
+shared.IH_Instance = InstanceManager
+
+-- ==========================================================
+-- ROBLOX SERVICES & VARIABLES
+-- ==========================================================
 local Players             = game:GetService("Players")
 local RunService          = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
@@ -52,7 +78,7 @@ local guiEverSeen         = false   -- apakah GUI minigame pernah terdeteksi
 
 -- FISHING TIMING
 local FISH_BITE_WAIT     = 15.0  -- 15 detik tepat tunggu gigitan
-local FISH_MINIGAME_MAX  = 15.0  -- Max timeout fallback minigame (bukan pakai ini untuk selesai!)
+local FISH_MINIGAME_MAX  = 15.0  -- Max timeout fallback minigame
 local FISH_RECAST_DELAY  = 1.0   -- Delay sebelum recast
 local FISH_CAST_DURATION = 1.8   -- Durasi hold klik cast
 
@@ -90,14 +116,16 @@ end
 -- BERSIHKAN GUI LAMA
 -- ==========================================
 pcall(function()
-    local cg = game:GetService("CoreGui"):FindFirstChild("IH_v4")
-    if cg then cg:Destroy() end
-    local pg = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("IH_v4")
-    if pg then pg:Destroy() end
+    for _, name in ipairs({"IH_v4", "IH_v5"}) do
+        local cg = game:GetService("CoreGui"):FindFirstChild(name)
+        if cg then cg:Destroy() end
+        local pg = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild(name)
+        if pg then pg:Destroy() end
+    end
 end)
 
 local gui = Instance.new("ScreenGui")
-gui.Name = "IH_v4"
+gui.Name = "IH_v5"
 gui.ResetOnSpawn = false
 
 local ok = pcall(function() gui.Parent = game:GetService("CoreGui") end)
@@ -130,7 +158,7 @@ Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 8)
 local titleLabel = Instance.new("TextLabel", titleBar)
 titleLabel.Size = UDim2.new(1, 0, 1, 0)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text      = "AUTO FARM SYSTEM v4"
+titleLabel.Text      = "AUTO FARM SYSTEM v5"
 titleLabel.TextColor3 = Color3.fromRGB(240, 245, 255)
 titleLabel.Font      = Enum.Font.SourceSansBold
 titleLabel.TextSize  = 16
@@ -241,9 +269,9 @@ timerFill.BorderSizePixel  = 0
 Instance.new("UICorner", timerFill).CornerRadius = UDim.new(1, 0)
 
 -- ==========================================
--- SET FISH PHASE (FIX: selalu reset semua dot dulu)
+-- SET FISH PHASE
 -- ==========================================
-local activeFishPhase = -1  -- -1 = belum diinit
+local activeFishPhase = -1
 
 local function stopAllPhaseTweens()
     for i = 1, #phaseTweens do
@@ -255,13 +283,12 @@ local function stopAllPhaseTweens()
 end
 
 local function setFishPhase(phaseIdx)
-    -- Selalu jalankan, tidak ada early return agar reset selalu bekerja
     activeFishPhase = phaseIdx
 
-    -- Hentikan semua animasi pulse dulu
+    -- Hentikan semua animasi pulse
     stopAllPhaseTweens()
 
-    -- Reset semua dot ke abu-abu dulu
+    -- Reset semua dot ke abu-abu
     for i = 1, #phaseDots do
         phaseDots[i].BackgroundColor3 = COLOR_INACTIVE
         phaseLabels[i].TextColor3     = COLOR_PEND_LBL
@@ -270,7 +297,6 @@ local function setFishPhase(phaseIdx)
     timerFill.BackgroundColor3 = Color3.fromRGB(100, 180, 255)
 
     if phaseIdx == 0 then
-        -- Mode OFF: semua abu-abu, bar kosong
         timerFill.Size = UDim2.new(0, 0, 1, 0)
         return
     end
@@ -280,14 +306,14 @@ local function setFishPhase(phaseIdx)
         local dot = phaseDots[i]
         local lbl = phaseLabels[i]
         if i < phaseIdx then
-            -- Sudah selesai
+            -- Fase sebelumnya (sukses)
             dot.BackgroundColor3 = COLOR_DONE_DOT
             lbl.TextColor3       = COLOR_DONE_LBL
         elseif i == phaseIdx then
-            -- Aktif sekarang
+            -- Fase aktif saat ini
             dot.BackgroundColor3 = phaseColors[i]
             lbl.TextColor3       = phaseColors[i]
-            -- Pulse animation
+            -- Animasi pulse sine
             local tw = TweenService:Create(
                 dot,
                 TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
@@ -296,7 +322,6 @@ local function setFishPhase(phaseIdx)
             tw:Play()
             phaseTweens[i] = tw
         end
-        -- i > phaseIdx: sudah di-reset ke abu-abu di atas
     end
 
     timerFill.BackgroundColor3 = phaseColors[math.clamp(phaseIdx, 1, 4)]
@@ -465,6 +490,33 @@ consoleLog = addConsoleLog
 btnClear.MouseButton1Click:Connect(function() consoleBox.Text = "" end)
 
 -- ==========================================
+-- RECURSIVE VISIBILITY CHECK HELPER
+-- ==========================================
+local function isTrulyVisible(obj)
+    if not obj or typeof(obj) ~= "Instance" then return false end
+    if not obj:IsA("GuiObject") then return false end
+    if not obj.Visible then return false end
+    
+    local ok, size = pcall(function() return obj.AbsoluteSize end)
+    if not ok or not size or size.X <= 0 or size.Y <= 0 then
+        return false
+    end
+    
+    local current = obj.Parent
+    while current and current ~= game do
+        if current:IsA("ScreenGui") then
+            if not current.Enabled then return false end
+            break
+        elseif current:IsA("GuiObject") then
+            if not current.Visible then return false end
+        end
+        current = current.Parent
+    end
+    
+    return true
+end
+
+-- ==========================================
 -- HELPERS UMUM
 -- ==========================================
 local function updateResultLabels()
@@ -515,7 +567,7 @@ local function equipTool(nameList)
 end
 
 -- ==========================================
--- FISHING: RESET STATE (FIX: paksa reset dots)
+-- FISHING: RESET STATE
 -- ==========================================
 local function resetFishingState()
     isCasting         = false
@@ -530,7 +582,8 @@ local function resetFishingState()
     whiteVelocity     = 0
     lastMinigameGuiSeen = 0
     fishingState      = "IDLE"
-    -- FIX: paksa reset semua fase indicator
+    
+    -- Paksa reset semua dots indikator ke abu-abu
     setFishPhase(0)
     updateTimerFill(0)
 end
@@ -551,10 +604,10 @@ end
 -- FISHING: DETEKSI BAR MINIGAME
 -- ==========================================
 local function getFishingElements()
-    -- Pakai cache jika masih valid
+    -- Cek cache dulu, pastikan masih valid dan benar-benar visible
     if cachedWhiteBar and cachedRedBar
        and cachedWhiteBar.Parent and cachedRedBar.Parent
-       and cachedWhiteBar.Visible and cachedRedBar.Visible then
+       and isTrulyVisible(cachedWhiteBar) and isTrulyVisible(cachedRedBar) then
         return cachedWhiteBar, cachedRedBar
     end
 
@@ -565,9 +618,9 @@ local function getFishingElements()
     local pg = player:FindFirstChild("PlayerGui")
     if not pg then return nil, nil end
 
-    -- Pass 1: nama eksak
+    -- Pass 1: Scan berdasarkan nama
     for _, v in pairs(pg:GetDescendants()) do
-        if v:IsA("GuiObject") and v.Visible then
+        if v:IsA("GuiObject") and isTrulyVisible(v) then
             local lname  = v.Name:lower()
             local parent = v.Parent
             if (lname == "whitebar" or lname:match("^whitebar") or lname:match("whitebar$") or
@@ -577,7 +630,7 @@ local function getFishingElements()
                             parent:FindFirstChild("TargetBar") or parent:FindFirstChild("targetbar")
                 if not red then
                     for _, sib in ipairs(parent:GetChildren()) do
-                        if sib ~= v and sib:IsA("GuiObject") and sib.Visible then
+                        if sib ~= v and sib:IsA("GuiObject") and isTrulyVisible(sib) then
                             local sn = sib.Name:lower()
                             if sn:find("red") or sn:find("target") or sn:find("goal") or sn:find("indicator") then
                                 red = sib; break
@@ -585,7 +638,7 @@ local function getFishingElements()
                         end
                     end
                 end
-                if red and v.AbsoluteSize.X > 10 and v.AbsoluteSize.Y > 5 then
+                if red and isTrulyVisible(red) and v.AbsoluteSize.X > 10 and v.AbsoluteSize.Y > 5 then
                     cachedWhiteBar = v; cachedRedBar = red
                     return v, red
                 end
@@ -593,15 +646,15 @@ local function getFishingElements()
         end
     end
 
-    -- Pass 2: heuristik warna
+    -- Pass 2: Scan berdasarkan warna
     for _, v in pairs(pg:GetDescendants()) do
-        if v:IsA("GuiObject") and v.Visible
+        if v:IsA("GuiObject") and isTrulyVisible(v)
            and v.AbsoluteSize.X > 15 and v.AbsoluteSize.Y > 6 then
             local c = v.BackgroundColor3
             local p = v.Parent
             if c.R > 0.85 and c.G > 0.85 and c.B > 0.85 and p and p:IsA("GuiObject") then
                 for _, sib in ipairs(p:GetChildren()) do
-                    if sib ~= v and sib:IsA("GuiObject") and sib.Visible and sib.AbsoluteSize.X > 15 then
+                    if sib ~= v and sib:IsA("GuiObject") and isTrulyVisible(sib) and sib.AbsoluteSize.X > 15 then
                         local sc = sib.BackgroundColor3
                         if sc.R > 0.52 and sc.G < 0.28 and sc.B < 0.28 then
                             cachedWhiteBar = v; cachedRedBar = sib
@@ -615,6 +668,57 @@ local function getFishingElements()
 
     cachedWhiteBar = nil; cachedRedBar = nil
     return nil, nil
+end
+
+-- ==========================================
+-- FISHING: CAST ROD
+-- ==========================================
+local castRod
+castRod = function()
+    if isCasting or not InstanceManager.Active then return end
+    isCasting = true
+    safeRun(function()
+        local cam = workspace.CurrentCamera
+        if not cam then isCasting = false; return end
+        local sc = cam.ViewportSize / 2
+
+        fishingState = "CASTING"
+        setFishPhase(1)
+        updateTimerFill(0)
+        setStatus("🎣 Melempar umpan...")
+        warn("[FISHING] Melempar umpan...")
+
+        local tool = player.Character and player.Character:FindFirstChildWhichIsA("Tool")
+        if tool then pcall(function() tool:Activate() end) end
+        pcall(function() VirtualUser:Button1Down(sc, cam.CFrame) end)
+
+        local castStart = os.clock()
+        while os.clock() - castStart < FISH_CAST_DURATION do
+            task.wait(0.05)
+            if not InstanceManager.Active or mode ~= "FISH" then
+                pcall(function() VirtualUser:Button1Up(sc, cam.CFrame) end)
+                isCasting = false; return
+            end
+            updateTimerFill((os.clock() - castStart) / FISH_CAST_DURATION)
+        end
+
+        pcall(function() VirtualUser:Button1Up(sc, cam.CFrame) end)
+        if tool then pcall(function() tool:Deactivate() end) end
+        updateTimerFill(1)
+        task.wait(0.2)
+
+        if InstanceManager.Active and mode == "FISH" then
+            fishingState     = "WAITING"
+            biteWaitStartTime = os.clock()
+            lastCastTime     = os.clock()
+            setFishPhase(2)
+            updateTimerFill(0)
+            setStatus("⏳ Menunggu gigitan... (15s)")
+            warn("[FISHING] Umpan dilempar! Menunggu 15 detik...")
+        end
+    end)
+    task.wait(0.2)
+    isCasting = false
 end
 
 -- ==========================================
@@ -639,124 +743,31 @@ local function handleFishSuccess(reason)
     setStatus(msg)
     warn("[FISHING] " .. msg)
 
-    -- Recast setelah delay
+    -- Recast setelah delay singkat
     task.spawn(function()
         task.wait(FISH_RECAST_DELAY)
-        if mode ~= "FISH" then return end
+        if not InstanceManager.Active or mode ~= "FISH" then return end
         resetFishingState()
         warn("[FISHING] Recast...")
         task.wait(0.1)
-        task.spawn(function()
-            local function castRodInner()
-                if isCasting then return end
-                isCasting = true
-                safeRun(function()
-                    local cam = workspace.CurrentCamera
-                    if not cam then isCasting = false; return end
-                    local sc = cam.ViewportSize / 2
-
-                    fishingState = "CASTING"
-                    setFishPhase(1)
-                    updateTimerFill(0)
-                    setStatus("🎣 Melempar umpan...")
-                    warn("[FISHING] Melempar umpan...")
-
-                    local tool = player.Character and player.Character:FindFirstChildWhichIsA("Tool")
-                    if tool then pcall(function() tool:Activate() end) end
-                    pcall(function() VirtualUser:Button1Down(sc, cam.CFrame) end)
-
-                    local castStart = os.clock()
-                    while os.clock() - castStart < FISH_CAST_DURATION do
-                        task.wait(0.05)
-                        if mode ~= "FISH" then
-                            pcall(function() VirtualUser:Button1Up(sc, cam.CFrame) end)
-                            isCasting = false; return
-                        end
-                        updateTimerFill((os.clock() - castStart) / FISH_CAST_DURATION)
-                    end
-
-                    pcall(function() VirtualUser:Button1Up(sc, cam.CFrame) end)
-                    if tool then pcall(function() tool:Deactivate() end) end
-                    updateTimerFill(1)
-                    task.wait(0.2)
-
-                    if mode == "FISH" then
-                        fishingState     = "WAITING"
-                        biteWaitStartTime = os.clock()
-                        lastCastTime     = os.clock()
-                        setFishPhase(2)
-                        updateTimerFill(0)
-                        setStatus("⏳ Menunggu gigitan... (15s)")
-                        warn("[FISHING] Umpan dilempar! Menunggu 15 detik...")
-                    end
-                end)
-                task.wait(0.2)
-                isCasting = false
-            end
-            castRodInner()
-        end)
+        if not InstanceManager.Active or mode ~= "FISH" then return end
+        task.spawn(castRod)
     end)
-end
-
--- ==========================================
--- FISHING: CAST ROD (forward declaration workaround)
--- ==========================================
-local castRod
-castRod = function()
-    if isCasting then return end
-    isCasting = true
-    safeRun(function()
-        local cam = workspace.CurrentCamera
-        if not cam then isCasting = false; return end
-        local sc = cam.ViewportSize / 2
-
-        fishingState = "CASTING"
-        setFishPhase(1)
-        updateTimerFill(0)
-        setStatus("🎣 Melempar umpan...")
-        warn("[FISHING] Melempar umpan...")
-
-        local tool = player.Character and player.Character:FindFirstChildWhichIsA("Tool")
-        if tool then pcall(function() tool:Activate() end) end
-        pcall(function() VirtualUser:Button1Down(sc, cam.CFrame) end)
-
-        local castStart = os.clock()
-        while os.clock() - castStart < FISH_CAST_DURATION do
-            task.wait(0.05)
-            if mode ~= "FISH" then
-                pcall(function() VirtualUser:Button1Up(sc, cam.CFrame) end)
-                isCasting = false; return
-            end
-            updateTimerFill((os.clock() - castStart) / FISH_CAST_DURATION)
-        end
-
-        pcall(function() VirtualUser:Button1Up(sc, cam.CFrame) end)
-        if tool then pcall(function() tool:Deactivate() end) end
-        updateTimerFill(1)
-        task.wait(0.2)
-
-        if mode == "FISH" then
-            fishingState     = "WAITING"
-            biteWaitStartTime = os.clock()
-            lastCastTime     = os.clock()
-            setFishPhase(2)
-            updateTimerFill(0)
-            setStatus("⏳ Menunggu gigitan... (15s)")
-            warn("[FISHING] Umpan dilempar! Menunggu 15 detik...")
-        end
-    end)
-    task.wait(0.2)
-    isCasting = false
 end
 
 -- ==========================================
 -- HEARTBEAT: FISHING CONTROLLER
 -- ==========================================
-RunService.Heartbeat:Connect(function()
+local heartbeatConnection
+heartbeatConnection = RunService.Heartbeat:Connect(function()
+    if not InstanceManager.Active then
+        if heartbeatConnection then pcall(function() heartbeatConnection:Disconnect() end) end
+        return
+    end
+
     if mode ~= "FISH" then
         if isSpacePressed then
-            pcall(function() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game) end)
-            isSpacePressed = false
+            setSpaceKey(false, true)
         end
         return
     end
@@ -764,7 +775,7 @@ RunService.Heartbeat:Connect(function()
     safeRun(function()
         local now = os.clock()
 
-        -- ── WAITING: hitung 15 detik ────────────────────────────────────
+        -- ── WAITING: tunggu gigitan tepat 15 detik ───────────────────────
         if fishingState == "WAITING" then
             local elapsed  = now - biteWaitStartTime
             local fraction = math.clamp(elapsed / FISH_BITE_WAIT, 0, 1)
@@ -772,7 +783,6 @@ RunService.Heartbeat:Connect(function()
             setStatus(string.format("⏳ Menunggu gigitan... %.1fs", math.max(0, FISH_BITE_WAIT - elapsed)))
 
             if elapsed >= FISH_BITE_WAIT then
-                -- Tepat 15 detik → masuk minigame
                 fishingState     = "MINIGAME"
                 minigameStartTime = now
                 successHandled   = false
@@ -797,10 +807,10 @@ RunService.Heartbeat:Connect(function()
         if fishingState == "MINIGAME" then
             local elapsed = now - minigameStartTime
 
-            -- Update progress bar (max display 15 detik)
+            -- Update progress bar minigame (max display fallback 15s)
             updateTimerFill(math.clamp(elapsed / FISH_MINIGAME_MAX, 0, 1))
 
-            -- FALLBACK: jika lebih dari FISH_MINIGAME_MAX detik → paksa selesai
+            -- FALLBACK: jika melebihi 15 detik → paksa selesai
             if elapsed >= FISH_MINIGAME_MAX then
                 setSpaceKey(false, true)
                 warn("[FISHING] Timeout fallback " .. FISH_MINIGAME_MAX .. "s → paksa selesai")
@@ -810,7 +820,7 @@ RunService.Heartbeat:Connect(function()
 
             local white, red = getFishingElements()
 
-            if white and red and white.Visible and red.Visible then
+            if white and red and isTrulyVisible(white) and isTrulyVisible(red) then
                 -- ── GUI TERDETEKSI ──────────────────────────────────────
                 guiEverSeen         = true
                 lastMinigameGuiSeen = now
@@ -822,7 +832,7 @@ RunService.Heartbeat:Connect(function()
                     whiteVelocity   = 0
                 end
 
-                -- Hitung posisi bar
+                -- Hitung koordinat dan kecepatan bar
                 local whiteCenter = white.AbsolutePosition.X + white.AbsoluteSize.X / 2
                 local redLeft     = red.AbsolutePosition.X
                 local redRight    = red.AbsolutePosition.X + red.AbsoluteSize.X
@@ -863,9 +873,8 @@ RunService.Heartbeat:Connect(function()
             else
                 -- ── GUI TIDAK TERDETEKSI ────────────────────────────────
                 if guiEverSeen then
-                    -- GUI PERNAH terlihat, tapi SEKARANG HILANG
-                    -- → Ini tandanya minigame SELESAI (ikan tertangkap / gagal)
-                    -- Beri grace period 0.25 detik agar tidak false-positive
+                    -- GUI sempat terlihat tapi sekarang hilang → MINIGAME SELESAI
+                    -- Beri toleransi 0.25 detik agar tidak terpicu dini
                     if lastMinigameGuiSeen > 0 and (now - lastMinigameGuiSeen) >= 0.25 then
                         setSpaceKey(false, true)
                         warn("[FISHING] GUI hilang setelah " .. string.format("%.1f", elapsed) .. "s → Minigame selesai!")
@@ -873,8 +882,8 @@ RunService.Heartbeat:Connect(function()
                         return
                     end
                 else
-                    -- GUI belum pernah terdeteksi: lakukan rhythmic tapping sambil tunggu GUI muncul
-                    -- (kadang GUI muncul sedikit terlambat setelah 15 detik)
+                    -- GUI belum terdeteksi setelah 15s (menunggu kemunculan GUI):
+                    -- Lakukan tapping berirama sebagai antisipasi delay GUI muncul
                     local rhythm = (math.floor(elapsed * 4) % 2 == 0)
                     setSpaceKey(rhythm)
                     setStatus(string.format("🎮 Menunggu GUI... %.1fs", elapsed))
@@ -882,25 +891,25 @@ RunService.Heartbeat:Connect(function()
             end
             return
         end
-
-        -- ── SUCCESS: tunggu saja (handleFishSuccess sudah handle recast) ─
-        if fishingState == "SUCCESS" then return end
     end)
 end)
+table.insert(InstanceManager.Connections, heartbeatConnection)
 
 -- ==========================================
--- FISHING EQUIP + CAST LOOP
+-- EQUIP + CAST CONTROLLER LOOP
 -- ==========================================
 task.spawn(function()
-    while true do
+    while InstanceManager.Active do
         task.wait(0.15)
+        if not InstanceManager.Active then break end
         if mode ~= "FISH" then continue end
+        
         safeRun(function()
             local char = player.Character
             if not char then return end
             local hum = char:FindFirstChildOfClass("Humanoid")
 
-            -- Anti lompat
+            -- Matikan lompatan lompat saat memancing
             if hum and hum:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
                 hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
             end
@@ -1061,12 +1070,12 @@ local function moveToPosition(hum, targetPos, targetPart)
     local lastPos  = char.PrimaryPart.Position
     local stuckFor = 0
     for index, wp in ipairs(wps) do
-        if mode ~= "MINE" then hum.WalkSpeed = orig; return false end
+        if mode ~= "MINE" or not InstanceManager.Active then hum.WalkSpeed = orig; return false end
         if targetPart and not targetPart.Parent then hum.WalkSpeed = orig; return false end
         if wp.Action == Enum.PathWaypointAction.Jump then hum.Jump = true end
         hum:MoveTo(wp.Position)
         local started = os.clock()
-        while mode == "MINE" and os.clock()-started < 4.5 do
+        while mode == "MINE" and InstanceManager.Active and os.clock()-started < 4.5 do
             task.wait(MINE_SMOOTH_MOVE and 0.08 or 0.15)
             if not char.PrimaryPart then hum.WalkSpeed = orig; return false end
             local cur   = char.PrimaryPart.Position
@@ -1101,8 +1110,9 @@ end
 
 local function mineRoutine()
     miningActive = true
-    while mode == "MINE" do
+    while mode == "MINE" and InstanceManager.Active do
         task.wait(0.5)
+        if not InstanceManager.Active then break end
         safeRun(function()
             local char = player.Character
             if not char or not char.PrimaryPart then return end
@@ -1142,7 +1152,7 @@ local function mineRoutine()
                 if onScreen then
                     local minedThisTarget = false
                     for i = 1, 7 do
-                        if mode ~= "MINE" then break end
+                        if mode ~= "MINE" or not InstanceManager.Active then break end
                         if crystal.Parent == nil then minedThisTarget = true; break end
                         facePart(crystal)
                         pcall(function() VirtualUser:Button1Down(Vector2.new(screenPos.X, screenPos.Y), cam.CFrame) end)
@@ -1176,15 +1186,17 @@ local function mineRoutine()
 end
 
 -- ==========================================
--- SETTINGS BUTTONS
+-- UI SETTINGS INTERACTIONS
 -- ==========================================
 btnSmooth.MouseButton1Click:Connect(function()
+    if not InstanceManager.Active then return end
     MINE_SMOOTH_MOVE = not MINE_SMOOTH_MOVE
     btnSmooth.Text = MINE_SMOOTH_MOVE and "Smooth: ON" or "Smooth: OFF"
     btnSmooth.BackgroundColor3 = MINE_SMOOTH_MOVE and Color3.fromRGB(42,92,71) or Color3.fromRGB(80,58,58)
 end)
 
 btnSpeed.MouseButton1Click:Connect(function()
+    if not InstanceManager.Active then return end
     if MINE_WALK_SPEED == 15 then MINE_WALK_SPEED = 13
     elseif MINE_WALK_SPEED == 13 then MINE_WALK_SPEED = 16
     else MINE_WALK_SPEED = 15 end
@@ -1192,6 +1204,7 @@ btnSpeed.MouseButton1Click:Connect(function()
 end)
 
 rangeBox.FocusLost:Connect(function()
+    if not InstanceManager.Active then return end
     local v = tonumber(rangeBox.Text)
     if not v then v = MINE_STOP_DISTANCE end
     v = math.clamp(v, 2.2, 5.5)
@@ -1200,20 +1213,23 @@ rangeBox.FocusLost:Connect(function()
 end)
 
 -- ==========================================
--- TOMBOL FISH (FIX: paksa reset dots saat OFF)
+-- TOMBOL FISH
 -- ==========================================
 local function forceTurnOffFish()
     mode = "OFF"
     btnFish.Text = "FISHING"
     btnFish.BackgroundColor3 = Color3.fromRGB(35, 45, 70)
     btnFishStroke.Color = Color3.fromRGB(60, 120, 200)
-    -- Paksa release Space
+    
+    -- Paksa lepas tombol Space
     pcall(function() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game) end)
     isSpacePressed = false
-    -- Paksa reset semua state & indikator
+    
+    -- Paksa reset semua state & matikan indikator (dots abu-abu)
     resetFishingState()
     setStatus("System Idle")
-    -- Pulihkan lompat
+    
+    -- Kembalikan kemampuan lompat normal
     pcall(function()
         local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
         if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true) end
@@ -1221,10 +1237,11 @@ local function forceTurnOffFish()
 end
 
 btnFish.MouseButton1Click:Connect(function()
+    if not InstanceManager.Active then return end
     if mode == "FISH" then
         forceTurnOffFish()
     else
-        -- Matikan mine jika aktif
+        -- Matikan mine jika sedang aktif
         if mode == "MINE" then
             mode = "OFF"
             btnMine.Text = "MINING"
@@ -1245,6 +1262,7 @@ end)
 -- TOMBOL MINE
 -- ==========================================
 btnMine.MouseButton1Click:Connect(function()
+    if not InstanceManager.Active then return end
     if mode == "MINE" then
         mode = "OFF"
         btnMine.Text = "MINING"
@@ -1256,7 +1274,7 @@ btnMine.MouseButton1Click:Connect(function()
             if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true) end
         end)
     else
-        -- Matikan fish jika aktif
+        -- Matikan fish jika sedang aktif
         if mode == "FISH" then forceTurnOffFish() end
         mode = "MINE"
         currentMiningTarget = nil; miningFailCount = 0; miningHitCount = 0
@@ -1277,11 +1295,11 @@ btnMine.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- INISIALISASI
+-- INISIALISASI AWAL
 -- ==========================================
-setFishPhase(0)   -- pastikan semua dot abu-abu saat pertama kali load
+setFishPhase(0)   -- pastikan semua dot dalam keadaan abu-abu pertama kali load
 
-warn("=== INDO HANGOUT BOT v4 LOADED ===")
-warn("File: autofish_v4.lua")
+warn("=== INDO HANGOUT BOT v5 LOADED ===")
+warn("File: autofish_v5.lua")
 warn("FISH: 15s tunggu → minigame → selesai saat GUI hilang → recast")
 warn("MINE: Auto scan & tambang crystal")
