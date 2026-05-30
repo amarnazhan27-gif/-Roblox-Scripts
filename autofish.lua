@@ -1,6 +1,6 @@
 -- ==========================================================
 -- INDO HANGOUT ALL-IN-ONE: AUTO FISH + AUTO MINE CRYSTAL
--- ANDROID/DELTA COMPATIBLE - FINAL VERSION
+-- ANDROID/DELTA COMPATIBLE - FINAL VERSION (dengan Konsol Debug)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -41,26 +41,45 @@ local lastSuccessfulIndicatorUpdate = os.clock()
 local indicatorHealthy = true
 local minigameStartTime = 0
 
--- Nama tool yang akan dicari (auto-detect fallback)
 local FISH_TOOL_NAMES = {"Fishing Rod", "Rod", "Pancing", "FishingRod"}
 local MINE_TOOL_NAMES = {"Pickaxe", "Cangkul", "Kapak", "Mining", "Pick", "Hammer"}
-
--- Nama/properti crystal di workspace
 local CRYSTAL_NAMES = {"8sisi", "Crystal", "Kristal", "Gem", "Ore", "Batu"}
-local CRYSTAL_MATERIAL = Enum.Material.Neon -- Material 272 = Neon (sesuai file map)
+local CRYSTAL_MATERIAL = Enum.Material.Neon
 local MINE_STOP_DISTANCE = 2.75
 local MINE_MAX_SCAN_DISTANCE = 260
 local PATH_RETRY_DELAY = 0.35
-local FISH_BITE_TIMEOUT = 10          -- Time to wait for minigame to appear after casting
-local FISH_MINIGAME_DURATION = 4      -- Estimated minigame duration
-local FISH_CATCH_DURATION = 0.5       -- Duration to let catch animation play
-local FISH_RECAST_DELAY = 0.8         -- Final delay before next cast
-local FISH_MINIGAME_GRACE = 0.8       -- Grace period for minigame detection
+local FISH_BITE_TIMEOUT = 10
+local FISH_MINIGAME_DURATION = 4
+local FISH_CATCH_DURATION = 0.5
+local FISH_RECAST_DELAY = 0.8
+local FISH_MINIGAME_GRACE = 0.8
 local MINE_SMOOTH_MOVE = true
 local MINE_WALK_SPEED = 15
 
 -- ==========================================
--- GUI UTAMA - PROFESSIONAL DESIGN
+-- LOGGING & KONSOL
+-- ==========================================
+local consoleLog = function() end   -- placeholder
+local originalWarn = warn
+local function customWarn(msg)
+    originalWarn(msg)
+    if consoleLog then consoleLog(tostring(msg), Color3.fromRGB(255,255,100)) end
+end
+warn = customWarn
+
+-- Safe runner untuk menangkap error di callback
+local function safeRun(f, ...)
+    local success, err = xpcall(f, function(e)
+        originalWarn("ERROR: " .. tostring(e))
+        if consoleLog then consoleLog("ERROR: " .. tostring(e), Color3.fromRGB(255,80,80)) end
+    end)
+    if not success then
+        -- xpcall sudah menangani, cukup return
+    end
+end
+
+-- ==========================================
+-- GUI UTAMA - PROFESSIONAL DESIGN (diperbesar untuk konsol)
 -- ==========================================
 pcall(function()
     local oldGui = game:GetService("CoreGui"):FindFirstChild("AllInOne_IH")
@@ -73,7 +92,7 @@ gui.ResetOnSpawn = false
 gui.Parent = game:GetService("CoreGui")
 
 local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0, 300, 0, 420)
+main.Size = UDim2.new(0, 300, 0, 580)  -- diperpanjang untuk konsol
 main.Position = UDim2.new(1, -315, 0, 20)
 main.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 main.BorderSizePixel = 0
@@ -266,6 +285,84 @@ btnSpeed.BorderSizePixel = 0
 local btnSpeedCorner = Instance.new("UICorner", btnSpeed)
 btnSpeedCorner.CornerRadius = UDim.new(0, 3)
 
+-- ==========================================
+-- KONSOL DEBUG
+-- ==========================================
+local consoleTitle = Instance.new("TextLabel", main)
+consoleTitle.Size = UDim2.new(1, -60, 0, 18)
+consoleTitle.Position = UDim2.new(0, 8, 0, 410)
+consoleTitle.BackgroundTransparency = 1
+consoleTitle.Text = "CONSOLE"
+consoleTitle.TextColor3 = Color3.fromRGB(100, 150, 200)
+consoleTitle.Font = Enum.Font.GothamSemibold
+consoleTitle.TextSize = 12
+
+local btnClearConsole = Instance.new("TextButton", main)
+btnClearConsole.Size = UDim2.new(0, 40, 0, 18)
+btnClearConsole.Position = UDim2.new(1, -48, 0, 410)
+btnClearConsole.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+btnClearConsole.Text = "Clear"
+btnClearConsole.Font = Enum.Font.Gotham
+btnClearConsole.TextSize = 9
+btnClearConsole.TextColor3 = Color3.fromRGB(200,200,200)
+btnClearConsole.BorderSizePixel = 0
+Instance.new("UICorner", btnClearConsole).CornerRadius = UDim.new(0,3)
+
+local consoleBox = Instance.new("TextBox", main)
+consoleBox.Size = UDim2.new(1, -16, 0, 140)
+consoleBox.Position = UDim2.new(0, 8, 0, 430)
+consoleBox.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+consoleBox.TextColor3 = Color3.fromRGB(200, 200, 200)
+consoleBox.Font = Enum.Font.GothamMonospace
+consoleBox.TextSize = 10
+consoleBox.TextXAlignment = Enum.TextXAlignment.Left
+consoleBox.TextYAlignment = Enum.TextYAlignment.Top
+consoleBox.Text = ""
+consoleBox.ClearTextOnFocus = false
+consoleBox.TextEditable = false
+consoleBox.MultiLine = true
+consoleBox.TextWrapped = true
+consoleBox.BorderSizePixel = 0
+
+local consoleCorner = Instance.new("UICorner", consoleBox)
+consoleCorner.CornerRadius = UDim.new(0, 3)
+
+local consoleStroke = Instance.new("UIStroke", consoleBox)
+consoleStroke.Color = Color3.fromRGB(60, 60, 80)
+consoleStroke.Thickness = 1
+
+local consoleMaxLines = 50
+local function addConsoleLog(text, color)
+    color = color or Color3.fromRGB(200,200,200)
+    local timestamp = os.date("%H:%M:%S")
+    local line = "["..timestamp.."] "..tostring(text)
+    local current = consoleBox.Text
+    if #current > 0 then
+        current = current .. "\n" .. line
+    else
+        current = line
+    end
+    -- batasi jumlah baris
+    local lines = {}
+    for l in current:gmatch("[^\n]+") do
+        table.insert(lines, l)
+    end
+    while #lines > consoleMaxLines do
+        table.remove(lines, 1)
+    end
+    consoleBox.Text = table.concat(lines, "\n")
+end
+
+-- Aktifkan fungsi log global
+consoleLog = addConsoleLog
+
+btnClearConsole.MouseButton1Click:Connect(function()
+    consoleBox.Text = ""
+end)
+
+-- ==========================================
+-- FUNGSI UPDATE LABEL & STATUS
+-- ==========================================
 local function updateResultLabels()
     resultFishLabel.Text = "Fish: " .. tostring(fishCaughtCount)
     resultMineLabel.Text = "Crystal: " .. tostring(crystalMinedCount)
@@ -282,16 +379,13 @@ local function findTool(nameList)
     local char = player.Character
     local bp = player.Backpack
     for _, name in ipairs(nameList) do
-        -- Cek di tangan dulu
         if char then
             local t = char:FindFirstChild(name)
             if t and t:IsA("Tool") then return t, "hand" end
         end
-        -- Cek backpack
         local t = bp:FindFirstChild(name)
         if t then return t, "backpack" end
     end
-    -- Fallback: ambil tool apapun
     if char then
         local t = char:FindFirstChildWhichIsA("Tool")
         if t then return t, "hand" end
@@ -310,20 +404,16 @@ local function equipTool(nameList)
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum then return nil end
 
-    -- Sudah di tangan?
     local toolInHand = char:FindFirstChildWhichIsA("Tool")
-
-    -- Cek apakah tool di tangan sudah sesuai
     for _, name in ipairs(nameList) do
         if toolInHand and toolInHand.Name:lower():find(name:lower()) then
             return toolInHand
         end
     end
 
-    -- Cari di backpack
     local tool, loc = findTool(nameList)
     if tool and loc == "backpack" then
-        hum:EquipTool(tool)
+        pcall(function() hum:EquipTool(tool) end)
         task.wait(0.8)
         return char:FindFirstChildWhichIsA("Tool")
     end
@@ -336,7 +426,7 @@ end
 local function castRod()
     if isCasting then return end
     isCasting = true
-    pcall(function()
+    safeRun(function()
         local cam = workspace.CurrentCamera
         if not cam then return end
         local screenCenter = cam.ViewportSize / 2
@@ -347,9 +437,9 @@ local function castRod()
         if tool then
             pcall(function() tool:Activate() end)
         end
-        VirtualUser:Button1Down(screenCenter, cam.CFrame)
+        pcall(function() VirtualUser:Button1Down(screenCenter, cam.CFrame) end)
         task.wait(1.65)
-        VirtualUser:Button1Up(screenCenter, cam.CFrame)
+        pcall(function() VirtualUser:Button1Up(screenCenter, cam.CFrame) end)
         if tool then
             pcall(function() tool:Deactivate() end)
         end
@@ -416,7 +506,7 @@ local function getFishingElements()
         end
     end
 
-    -- Fallback color detection (more accurate)
+    -- Fallback color detection
     for _, v in pairs(playerGui:GetDescendants()) do
         if v:IsA("GuiObject") and v.Visible and v.AbsoluteSize.X > 15 and v.AbsoluteSize.Y > 6 then
             local c = v.BackgroundColor3
@@ -442,26 +532,11 @@ local function getFishingElements()
     return fallbackWhite, fallbackRed
 end
 
-local function hasFishingActivityGui()
-    local playerGui = player:FindFirstChild("PlayerGui")
-    if not playerGui then return false end
-    for _, v in ipairs(playerGui:GetDescendants()) do
-        local name = v.Name:lower()
-        if v:IsA("GuiObject") and v.Visible and (name:find("fish") or name:find("bar") or name:find("minigame")) then
-            local size = v.AbsoluteSize
-            if size.X > 20 and size.Y > 4 then
-                return true
-            end
-        end
-    end
-    return false
-end
-
 local function setSpacePressed(pressed, force)
     if isSpacePressed == pressed then return end
     local now = os.clock()
     if not force and now - lastSpaceToggle < 0.035 then return end
-    VirtualInputManager:SendKeyEvent(pressed, Enum.KeyCode.Space, false, game)
+    pcall(function() VirtualInputManager:SendKeyEvent(pressed, Enum.KeyCode.Space, false, game) end)
     isSpacePressed = pressed
     lastSpaceToggle = now
 end
@@ -725,7 +800,7 @@ local function facePart(part)
     if not char or not char.PrimaryPart or not part then return end
     local pos = char.PrimaryPart.Position
     local lookAt = Vector3.new(part.Position.X, pos.Y, part.Position.Z)
-    char:SetPrimaryPartCFrame(CFrame.lookAt(pos, lookAt))
+    pcall(function() char:SetPrimaryPartCFrame(CFrame.lookAt(pos, lookAt)) end)
 end
 
 -- ==========================================
@@ -735,291 +810,270 @@ local function mineRoutine()
     miningActive = true
     while mode == "MINE" do
         task.wait(0.5)
-        local char = player.Character
-        if not char then continue end
-        if not char.PrimaryPart then continue end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hum then continue end
+        safeRun(function()
+            local char = player.Character
+            if not char then return end
+            if not char.PrimaryPart then return end
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if not hum then return end
 
-        -- Cari crystal terdekat
-        local crystal, dist = findNearestCrystal()
-
-        if not crystal then
-            setStatus("Mining: Crystal not found")
-            warn("[MINE] Crystal tidak ditemukan. Scan workspace...")
-            task.wait(3)
-            continue
-        end
-
-        setStatus("Mining: " .. crystal.Name .. " (" .. math.floor(dist) .. " stud)")
-        warn("[MINE] Crystal ditemukan: " .. crystal.Name .. " jarak: " .. math.floor(dist))
-
-        -- Equip pickaxe
-        local tool = equipTool(MINE_TOOL_NAMES)
-        if not tool then
-            setStatus("Mining: No pickaxe")
-            warn("[MINE] Tidak ada pickaxe di backpack!")
-            task.wait(3)
-            continue
-        end
-
-        -- Jalan ke titik samping crystal, bukan ke pusatnya, agar tidak naik ke atas batu.
-        local standPoint = getMiningStandPoint(crystal)
-        if standPoint and (char.PrimaryPart.Position - standPoint).Magnitude > 2.0 then
-            warn("[MINE] Pathfinding ke sisi crystal...")
-            local arrived = moveToPosition(hum, standPoint, crystal)
-            if not arrived then
-                miningFailCount = miningFailCount + 1
-                if miningFailCount >= 3 then
-                    currentMiningTarget = nil
-                end
-                task.wait(0.4)
-                continue
+            local crystal, dist = findNearestCrystal()
+            if not crystal then
+                setStatus("Mining: Crystal not found")
+                warn("[MINE] Crystal tidak ditemukan. Scan workspace...")
+                task.wait(3)
+                return
             end
-        end
 
-        -- Tambang: klik berkali-kali pada crystal
-        facePart(crystal)
-        local cam = workspace.CurrentCamera
-        if cam then
-            local aimPos = crystal.Position + Vector3.new(0, math.clamp(crystal.Size.Y * 0.15, 0.5, 2.5), 0)
-            local screenPos, onScreen = cam:WorldToScreenPoint(aimPos)
-            if onScreen then
-                warn("[MINE] Menambang crystal...")
-                local minedThisTarget = false
-                for i = 1, 7 do
-                    if mode ~= "MINE" then break end
-                    if crystal.Parent == nil then
-                        minedThisTarget = true
-                        break
+            setStatus("Mining: " .. crystal.Name .. " (" .. math.floor(dist) .. " stud)")
+            warn("[MINE] Crystal ditemukan: " .. crystal.Name .. " jarak: " .. math.floor(dist))
+
+            local tool = equipTool(MINE_TOOL_NAMES)
+            if not tool then
+                setStatus("Mining: No pickaxe")
+                warn("[MINE] Tidak ada pickaxe di backpack!")
+                task.wait(3)
+                return
+            end
+
+            local standPoint = getMiningStandPoint(crystal)
+            if standPoint and (char.PrimaryPart.Position - standPoint).Magnitude > 2.0 then
+                warn("[MINE] Pathfinding ke sisi crystal...")
+                local arrived = moveToPosition(hum, standPoint, crystal)
+                if not arrived then
+                    miningFailCount = miningFailCount + 1
+                    if miningFailCount >= 3 then
+                        currentMiningTarget = nil
                     end
-                    facePart(crystal)
-                    -- Klik di posisi crystal di layar
-                    VirtualUser:Button1Down(
-                        Vector2.new(screenPos.X, screenPos.Y),
-                        cam.CFrame
-                    )
-                    task.wait(0.15)
-                    VirtualUser:Button1Up(
-                        Vector2.new(screenPos.X, screenPos.Y),
-                        cam.CFrame
-                    )
-                    task.wait(0.3)
-                    pcall(function() tool:Activate() end)
+                    task.wait(0.4)
+                    return
                 end
-                if minedThisTarget or crystal.Parent == nil then
-                    crystalMinedCount = crystalMinedCount + 1
-                    updateResultLabels()
-                    setStatus("Mining: Crystal mined")
-                    currentMiningTarget = nil
-                    miningFailCount = 0
-                else
-                    miningHitCount = miningHitCount + 1
-                    if miningHitCount >= 3 then
+            end
+
+            facePart(crystal)
+            local cam = workspace.CurrentCamera
+            if cam then
+                local aimPos = crystal.Position + Vector3.new(0, math.clamp(crystal.Size.Y * 0.15, 0.5, 2.5), 0)
+                local screenPos, onScreen = cam:WorldToScreenPoint(aimPos)
+                if onScreen then
+                    warn("[MINE] Menambang crystal...")
+                    local minedThisTarget = false
+                    for i = 1, 7 do
+                        if mode ~= "MINE" then break end
+                        if crystal.Parent == nil then
+                            minedThisTarget = true
+                            break
+                        end
+                        facePart(crystal)
+                        pcall(function()
+                            VirtualUser:Button1Down(Vector2.new(screenPos.X, screenPos.Y), cam.CFrame)
+                        end)
+                        task.wait(0.15)
+                        pcall(function()
+                            VirtualUser:Button1Up(Vector2.new(screenPos.X, screenPos.Y), cam.CFrame)
+                        end)
+                        task.wait(0.3)
+                        pcall(function() tool:Activate() end)
+                    end
+                    if minedThisTarget or crystal.Parent == nil then
                         crystalMinedCount = crystalMinedCount + 1
-                        miningHitCount = 0
                         updateResultLabels()
-                        setStatus("Mining: Hit confirmed")
+                        setStatus("Mining: Crystal mined")
+                        currentMiningTarget = nil
+                        miningFailCount = 0
+                    else
+                        miningHitCount = miningHitCount + 1
+                        if miningHitCount >= 3 then
+                            crystalMinedCount = crystalMinedCount + 1
+                            miningHitCount = 0
+                            updateResultLabels()
+                            setStatus("Mining: Hit confirmed")
+                        end
                     end
+                else
+                    warn("[MINE] Crystal di luar layar, activate tool...")
+                    pcall(function() tool:Activate() end)
+                    task.wait(1)
                 end
-            else
-                -- Crystal tidak terlihat di layar, coba activate tool
-                warn("[MINE] Crystal di luar layar, activate tool...")
-                pcall(function() tool:Activate() end)
-                task.wait(1)
             end
-        end
-
+        end)
         task.wait(0.5)
     end
     miningActive = false
 end
 
 -- ==========================================
--- FISHING MINIGAME HANDLER (Heartbeat) - IMPROVED
+-- FISHING MINIGAME HANDLER (Heartbeat) - dengan error catching
 -- ==========================================
 RunService.Heartbeat:Connect(function()
     if mode ~= "FISH" then
-        -- Paksa lepas Space jika tidak fishing
         if isSpacePressed then
-            setSpacePressed(false, true)
+            pcall(function() setSpacePressed(false, true) end)
         end
         return
     end
 
-    local white, red = getFishingElements()
+    safeRun(function()
+        local white, red = getFishingElements()
 
-    if white and red and white.Visible and red.Visible then
-        lastMinigameGuiSeen = os.clock()
-        -- Minigame aktif
-        if not minigameJustStarted then
-            minigameJustStarted = true
-            minigameStartTime = os.clock()
-            setSpacePressed(false, true)
-            lastWhiteCenter = nil
-            lastWhiteSample = os.clock()
-            whiteVelocity = 0
-            fishingState = "MINIGAME"
-            lastSuccessfulIndicatorUpdate = os.clock()
-            setStatus("Minigame Detected")
-            warn("[FISH] Minigame dimulai!")
-        end
+        if white and red and white.Visible and red.Visible then
+            lastMinigameGuiSeen = os.clock()
+            if not minigameJustStarted then
+                minigameJustStarted = true
+                minigameStartTime = os.clock()
+                setSpacePressed(false, true)
+                lastWhiteCenter = nil
+                lastWhiteSample = os.clock()
+                whiteVelocity = 0
+                fishingState = "MINIGAME"
+                lastSuccessfulIndicatorUpdate = os.clock()
+                setStatus("Minigame Detected")
+                warn("[FISH] Minigame dimulai!")
+            end
 
-        local whiteCenter = white.AbsolutePosition.X + (white.AbsoluteSize.X / 2)
-        local redCenter = red.AbsolutePosition.X + (red.AbsoluteSize.X / 2)
-        local redLeft = red.AbsolutePosition.X
-        local redRight = red.AbsolutePosition.X + red.AbsoluteSize.X
-        local now = os.clock()
-        local dt = math.max(now - lastWhiteSample, 0.012)
+            local whiteCenter = white.AbsolutePosition.X + (white.AbsoluteSize.X / 2)
+            local redCenter = red.AbsolutePosition.X + (red.AbsoluteSize.X / 2)
+            local redLeft = red.AbsolutePosition.X
+            local redRight = red.AbsolutePosition.X + red.AbsoluteSize.X
+            local now = os.clock()
+            local dt = math.max(now - lastWhiteSample, 0.012)
 
-        if lastWhiteCenter then
-            local instantVelocity = (whiteCenter - lastWhiteCenter) / dt
-            -- Improved velocity smoothing: more responsive but stable
-            whiteVelocity = (whiteVelocity * 0.72) + (instantVelocity * 0.28)
-        end
-        lastWhiteCenter = whiteCenter
-        lastWhiteSample = now
+            if lastWhiteCenter then
+                local instantVelocity = (whiteCenter - lastWhiteCenter) / dt
+                whiteVelocity = (whiteVelocity * 0.72) + (instantVelocity * 0.28)
+            end
+            lastWhiteCenter = whiteCenter
+            lastWhiteSample = now
 
-        -- Improved prediction dengan dynamic lookhead
-        local predictedLookhead = math.clamp(math.abs(whiteVelocity) / 2000, 0.04, 0.12)
-        local predictedWhite = whiteCenter + (whiteVelocity * predictedLookhead)
+            local predictedLookhead = math.clamp(math.abs(whiteVelocity) / 2000, 0.04, 0.12)
+            local predictedWhite = whiteCenter + (whiteVelocity * predictedLookhead)
 
-        local redWidth = math.max(red.AbsoluteSize.X, 1)
-        -- Better tolerance: adaptive based on red bar size
-        local tolerance = math.clamp(redWidth * 0.22, 6, 18)
+            local redWidth = math.max(red.AbsoluteSize.X, 1)
+            local tolerance = math.clamp(redWidth * 0.22, 6, 18)
 
-        -- Check if white bar is inside red bar
-        local isInside = predictedWhite >= (redLeft - tolerance) and predictedWhite <= (redRight + tolerance)
+            local isInside = predictedWhite >= (redLeft - tolerance) and predictedWhite <= (redRight + tolerance)
 
-        -- If already inside, use smaller controls
-        if isInside then
-            if whiteCenter < redLeft then
-                setSpacePressed(true)
-            elseif whiteCenter > redRight then
-                setSpacePressed(false)
+            if isInside then
+                if whiteCenter < redLeft then
+                    setSpacePressed(true)
+                elseif whiteCenter > redRight then
+                    setSpacePressed(false)
+                else
+                    local centerRed = (redLeft + redRight) / 2
+                    local error = whiteCenter - centerRed
+                    if math.abs(error) > tolerance * 0.5 then
+                        setSpacePressed(error < 0)
+                    end
+                end
             else
-                -- Maintain position with micro movements
-                local centerRed = (redLeft + redRight) / 2
-                local error = whiteCenter - centerRed
-                if math.abs(error) > tolerance * 0.5 then
-                    setSpacePressed(error < 0)
+                local error = redCenter - predictedWhite
+                if error > tolerance then
+                    setSpacePressed(true)
+                elseif error < -tolerance then
+                    setSpacePressed(false)
+                elseif math.abs(whiteVelocity) > 200 then
+                    setSpacePressed(whiteVelocity < 0)
                 end
             end
+
+            indicatorHealthy = true
+            lastSuccessfulIndicatorUpdate = now
+
         else
-            -- Chase mode
-            local error = redCenter - predictedWhite
-            if error > tolerance then
-                setSpacePressed(true)
-            elseif error < -tolerance then
-                setSpacePressed(false)
-            elseif math.abs(whiteVelocity) > 200 then
-                setSpacePressed(whiteVelocity < 0)
+            if fishingState == "MINIGAME" and os.clock() - lastMinigameGuiSeen < FISH_MINIGAME_GRACE then
+                return
+            end
+
+            minigameJustStarted = false
+            setSpacePressed(false, true)
+            lastWhiteCenter = nil
+            whiteVelocity = 0
+
+            if fishingState == "MINIGAME" then
+                fishingState = "CATCHING"
+                lastMinigameTime = os.clock()
+                setStatus("Processing Catch")
+                warn("[FISHING] Minigame completed, processing catch...")
+            elseif fishingState == "CATCHING" then
+                local catchingDuration = os.clock() - lastMinigameTime
+                if catchingDuration >= FISH_CATCH_DURATION then
+                    fishingState = "COOLDOWN"
+                    nextCastTime = os.clock() + FISH_RECAST_DELAY
+                    fishCaughtCount = fishCaughtCount + 1
+                    updateResultLabels()
+                    setStatus("Fish Caught")
+                    warn("[FISHING] Fish successfully caught! Total: " .. tostring(fishCaughtCount))
+                end
+            elseif fishingState == "COOLDOWN" then
+                local cooldownDuration = os.clock() - lastMinigameTime
+                if cooldownDuration >= (FISH_CATCH_DURATION + FISH_RECAST_DELAY) then
+                    fishingState = "IDLE"
+                    nextCastTime = os.clock()
+                    setStatus("Ready to Cast")
+                end
             end
         end
-
-        indicatorHealthy = true
-        lastSuccessfulIndicatorUpdate = now
-
-    else
-        -- Minigame tidak aktif
-        if fishingState == "MINIGAME" and os.clock() - lastMinigameGuiSeen < FISH_MINIGAME_GRACE then
-            return
-        end
-
-        minigameJustStarted = false
-        setSpacePressed(false, true)
-        lastWhiteCenter = nil
-        whiteVelocity = 0
-
-        if fishingState == "MINIGAME" then
-            fishingState = "CATCHING"
-            lastMinigameTime = os.clock()
-            setStatus("Processing Catch")
-            warn("[FISHING] Minigame completed, processing catch...")
-        elseif fishingState == "CATCHING" then
-            local catchingDuration = os.clock() - lastMinigameTime
-            if catchingDuration >= FISH_CATCH_DURATION then
-                fishingState = "COOLDOWN"
-                nextCastTime = os.clock() + FISH_RECAST_DELAY
-                fishCaughtCount = fishCaughtCount + 1
-                updateResultLabels()
-                setStatus("Fish Caught")
-                warn("[FISHING] Fish successfully caught! Total: " .. tostring(fishCaughtCount))
-            end
-        elseif fishingState == "COOLDOWN" then
-            local cooldownDuration = os.clock() - lastMinigameTime
-            if cooldownDuration >= (FISH_CATCH_DURATION + FISH_RECAST_DELAY) then
-                fishingState = "IDLE"
-                nextCastTime = os.clock()
-                setStatus("Ready to Cast")
-            end
-        end
-    end
+    end)
 end)
 
 -- ==========================================
--- FISHING EQUIP + CAST LOOP - IMPROVED
+-- FISHING EQUIP + CAST LOOP (error catching)
 -- ==========================================
 task.spawn(function()
     while true do
         task.wait(0.15)
         if mode ~= "FISH" then continue end
+        safeRun(function()
+            local char = player.Character
+            if not char then return end
+            local hum = char:FindFirstChildOfClass("Humanoid")
 
-        local char = player.Character
-        if not char then continue end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-
-        -- Anti lompat
-        if hum and hum:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
-            hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
-        end
-
-        -- Equip rod
-        local tool = equipTool(FISH_TOOL_NAMES)
-
-        if tool and not isCasting then
-            local now = os.clock()
-            local timeSinceCast = now - lastCastTime
-
-            -- Siap untuk cast?
-            if fishingState == "IDLE" and now >= nextCastTime then
-                setStatus("Preparing Cast")
-                task.spawn(castRod)
-
-            -- Timeout dari WAITING state
-            elseif fishingState == "WAITING" and timeSinceCast >= FISH_BITE_TIMEOUT then
-                setStatus("Bite Timeout - Recasting")
-                warn("[FISH] Timeout gigitan setelah " .. string.format("%.1f", timeSinceCast) .. "s, casting ulang")
-                task.spawn(castRod)
-
-            -- Auto recast jika stuck di COOLDOWN
-            elseif fishingState == "COOLDOWN" and now >= nextCastTime then
-                fishingState = "IDLE"
-                nextCastTime = os.clock()
-                setStatus("Ready to Cast")
-
-            -- Status updates
-            elseif fishingState == "WAITING" then
-                local waitTime = math.floor(timeSinceCast * 10) / 10
-                setStatus("Waiting for Bite: " .. string.format("%.1f", waitTime) .. "s")
-
-            elseif fishingState == "CASTING" then
-                setStatus("Casting Rod")
-
-            elseif fishingState == "COOLDOWN" then
-                local remaining = math.max(0, nextCastTime - now)
-                setStatus("Cooldown: " .. string.format("%.1f", remaining) .. "s")
-
-            elseif fishingState == "CATCHING" then
-                setStatus("Processing Catch")
-
-            elseif fishingState == "MINIGAME" then
-                local elapsed = os.clock() - minigameStartTime
-                setStatus("Minigame: " .. string.format("%.1f", elapsed) .. "s")
+            if hum and hum:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
+                hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
             end
-        elseif not tool then
-            setStatus("Fish: Tidak ada rod")
-        end
+
+            local tool = equipTool(FISH_TOOL_NAMES)
+
+            if tool and not isCasting then
+                local now = os.clock()
+                local timeSinceCast = now - lastCastTime
+
+                if fishingState == "IDLE" and now >= nextCastTime then
+                    setStatus("Preparing Cast")
+                    task.spawn(castRod)
+
+                elseif fishingState == "WAITING" and timeSinceCast >= FISH_BITE_TIMEOUT then
+                    setStatus("Bite Timeout - Recasting")
+                    warn("[FISH] Timeout gigitan setelah " .. string.format("%.1f", timeSinceCast) .. "s, casting ulang")
+                    task.spawn(castRod)
+
+                elseif fishingState == "COOLDOWN" and now >= nextCastTime then
+                    fishingState = "IDLE"
+                    nextCastTime = os.clock()
+                    setStatus("Ready to Cast")
+
+                elseif fishingState == "WAITING" then
+                    local waitTime = math.floor(timeSinceCast * 10) / 10
+                    setStatus("Waiting for Bite: " .. string.format("%.1f", waitTime) .. "s")
+
+                elseif fishingState == "CASTING" then
+                    setStatus("Casting Rod")
+
+                elseif fishingState == "COOLDOWN" then
+                    local remaining = math.max(0, nextCastTime - now)
+                    setStatus("Cooldown: " .. string.format("%.1f", remaining) .. "s")
+
+                elseif fishingState == "CATCHING" then
+                    setStatus("Processing Catch")
+
+                elseif fishingState == "MINIGAME" then
+                    local elapsed = os.clock() - minigameStartTime
+                    setStatus("Minigame: " .. string.format("%.1f", elapsed) .. "s")
+                end
+            elseif not tool then
+                setStatus("Fish: Tidak ada rod")
+            end
+        end)
     end
 end)
 
@@ -1079,7 +1133,6 @@ end)
 -- ==========================================
 btnFish.MouseButton1Click:Connect(function()
     if mode == "FISH" then
-        -- Matikan fish
         mode = "OFF"
         btnFish.Text = "FISHING"
         btnFish.BackgroundColor3 = Color3.fromRGB(35, 45, 70)
@@ -1094,7 +1147,6 @@ btnFish.MouseButton1Click:Connect(function()
         whiteVelocity = 0
         isCasting = false
         setStatus("System Idle")
-
         if isSpacePressed then
             setSpacePressed(false, true)
         end
@@ -1103,7 +1155,6 @@ btnFish.MouseButton1Click:Connect(function()
             if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true) end
         end)
     else
-        -- Nyalakan fish, matikan mine
         mode = "FISH"
         btnFish.Text = "FISHING"
         btnFish.BackgroundColor3 = Color3.fromRGB(50, 70, 100)
@@ -1129,19 +1180,16 @@ end)
 -- ==========================================
 btnMine.MouseButton1Click:Connect(function()
     if mode == "MINE" then
-        -- Matikan mine
         mode = "OFF"
         btnMine.Text = "MINING"
         btnMine.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
         btnMineStroke.Color = Color3.fromRGB(80, 80, 100)
         setStatus("System Idle")
-
         pcall(function()
             local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
             if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true) end
         end)
     else
-        -- Nyalakan mine, matikan fish
         mode = "MINE"
         currentMiningTarget = nil
         miningFailCount = 0
@@ -1152,7 +1200,6 @@ btnMine.MouseButton1Click:Connect(function()
         btnFish.Text = "FISHING"
         btnFish.BackgroundColor3 = Color3.fromRGB(35, 45, 70)
         btnFishStroke.Color = Color3.fromRGB(60, 120, 200)
-
         if isSpacePressed then
             setSpacePressed(false, true)
         end
@@ -1170,7 +1217,6 @@ btnMine.MouseButton1Click:Connect(function()
         whiteVelocity = 0
         setStatus("Mining Active")
         warn("[SYSTEM] Mining Mode Started")
-
         if not miningActive then
             task.spawn(mineRoutine)
         end
@@ -1181,3 +1227,4 @@ warn("=== INDO HANGOUT BOT LOADED ===")
 warn("Tombol FISH = Auto Mancing")
 warn("Tombol MINE = Auto Nambang Crystal")
 warn("Jika crystal tidak ditemukan, cek output untuk scan nama object")
+warn("Konsol bawaan menampilkan semua log dan ERROR (merah)")
