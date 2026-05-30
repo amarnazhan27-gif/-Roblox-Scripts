@@ -1,6 +1,6 @@
 -- ==========================================================
 -- INDO HANGOUT ALL-IN-ONE: AUTO FISH + AUTO MINE CRYSTAL
--- ANDROID/DELTA COMPATIBLE - FINAL VERSION (dengan Konsol Debug)
+-- ANDROID/DELTA COMPATIBLE - FINAL VERSION (FONT FIX)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -13,7 +13,7 @@ local player = Players.LocalPlayer
 -- ==========================================
 -- STATE & CONFIG
 -- ==========================================
-local mode = "OFF"       -- OFF, FISH, MINE
+local mode = "OFF"
 local isSpacePressed = false
 local fishingState = "IDLE"
 local lastCastTime = 0
@@ -57,9 +57,9 @@ local MINE_SMOOTH_MOVE = true
 local MINE_WALK_SPEED = 15
 
 -- ==========================================
--- LOGGING & KONSOL
+-- LOGGING & KONSOL (global consoleLog)
 -- ==========================================
-local consoleLog = function() end   -- placeholder
+local consoleLog = function() end
 local originalWarn = warn
 local function customWarn(msg)
     originalWarn(msg)
@@ -67,32 +67,39 @@ local function customWarn(msg)
 end
 warn = customWarn
 
--- Safe runner untuk menangkap error di callback
 local function safeRun(f, ...)
-    local success, err = xpcall(f, function(e)
+    xpcall(f, function(e)
         originalWarn("ERROR: " .. tostring(e))
         if consoleLog then consoleLog("ERROR: " .. tostring(e), Color3.fromRGB(255,80,80)) end
     end)
-    if not success then
-        -- xpcall sudah menangani, cukup return
-    end
 end
 
 -- ==========================================
--- GUI UTAMA - PROFESSIONAL DESIGN (diperbesar untuk konsol)
+-- GUI UTAMA - DENGAN FALLBACK PLAYERGUI
 -- ==========================================
 pcall(function()
     local oldGui = game:GetService("CoreGui"):FindFirstChild("AllInOne_IH")
     if oldGui then oldGui:Destroy() end
+    local oldGui2 = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("AllInOne_IH")
+    if oldGui2 then oldGui2:Destroy() end
 end)
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "AllInOne_IH"
 gui.ResetOnSpawn = false
-gui.Parent = game:GetService("CoreGui")
+
+local success = pcall(function()
+    gui.Parent = game:GetService("CoreGui")
+end)
+if not success then
+    pcall(function()
+        gui.Parent = player:WaitForChild("PlayerGui")
+    end)
+    warn("GUI dipindah ke PlayerGui karena CoreGui tidak bisa diakses")
+end
 
 local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0, 300, 0, 580)  -- diperpanjang untuk konsol
+main.Size = UDim2.new(0, 300, 0, 580)
 main.Position = UDim2.new(1, -315, 0, 20)
 main.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 main.BorderSizePixel = 0
@@ -121,7 +128,7 @@ titleLabel.Size = UDim2.new(1, 0, 1, 0)
 titleLabel.BackgroundTransparency = 1
 titleLabel.Text = "AUTO FARM SYSTEM"
 titleLabel.TextColor3 = Color3.fromRGB(240, 245, 255)
-titleLabel.Font = Enum.Font.GothamBold
+titleLabel.Font = Enum.Font.SourceSansBold   -- FIX: ganti dari GothamBold
 titleLabel.TextSize = 16
 
 local statusBar = Instance.new("Frame", main)
@@ -138,7 +145,7 @@ statusLabel.Size = UDim2.new(1, 0, 1, 0)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Text = "Status: IDLE"
 statusLabel.TextColor3 = Color3.fromRGB(150, 220, 255)
-statusLabel.Font = Enum.Font.GothamMonospace
+statusLabel.Font = Enum.Font.Code   -- FIX: dari GothamMonospace ke Code
 statusLabel.TextSize = 13
 
 local btnFish = Instance.new("TextButton", main)
@@ -146,7 +153,7 @@ btnFish.Size = UDim2.new(1, -16, 0, 36)
 btnFish.Position = UDim2.new(0, 8, 0, 92)
 btnFish.BackgroundColor3 = Color3.fromRGB(35, 45, 70)
 btnFish.Text = "FISHING"
-btnFish.Font = Enum.Font.GothamBold
+btnFish.Font = Enum.Font.SourceSansBold
 btnFish.TextScaled = false
 btnFish.TextSize = 14
 btnFish.TextColor3 = Color3.fromRGB(200, 200, 200)
@@ -164,7 +171,7 @@ btnMine.Size = UDim2.new(1, -16, 0, 36)
 btnMine.Position = UDim2.new(0, 8, 0, 136)
 btnMine.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 btnMine.Text = "MINING"
-btnMine.Font = Enum.Font.GothamBold
+btnMine.Font = Enum.Font.SourceSansBold
 btnMine.TextScaled = false
 btnMine.TextSize = 14
 btnMine.TextColor3 = Color3.fromRGB(200, 200, 200)
@@ -183,7 +190,7 @@ statLabel.Position = UDim2.new(0, 0, 0, 182)
 statLabel.BackgroundTransparency = 1
 statLabel.Text = "STATISTICS"
 statLabel.TextColor3 = Color3.fromRGB(100, 150, 200)
-statLabel.Font = Enum.Font.GothamSemibold
+statLabel.Font = Enum.Font.SourceSansSemibold
 statLabel.TextSize = 12
 
 local resultFishLabel = Instance.new("TextLabel", main)
@@ -192,7 +199,7 @@ resultFishLabel.Position = UDim2.new(0, 8, 0, 204)
 resultFishLabel.BackgroundColor3 = Color3.fromRGB(25, 40, 60)
 resultFishLabel.Text = "Fish: 0"
 resultFishLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
-resultFishLabel.Font = Enum.Font.GothamSemibold
+resultFishLabel.Font = Enum.Font.SourceSansSemibold
 resultFishLabel.TextSize = 12
 resultFishLabel.BorderSizePixel = 0
 
@@ -205,7 +212,7 @@ resultMineLabel.Position = UDim2.new(0.5, 2, 0, 204)
 resultMineLabel.BackgroundColor3 = Color3.fromRGB(45, 40, 25)
 resultMineLabel.Text = "Crystal: 0"
 resultMineLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
-resultMineLabel.Font = Enum.Font.GothamSemibold
+resultMineLabel.Font = Enum.Font.SourceSansSemibold
 resultMineLabel.TextSize = 12
 resultMineLabel.BorderSizePixel = 0
 
@@ -218,7 +225,7 @@ settingsTitle.Position = UDim2.new(0, 0, 0, 242)
 settingsTitle.BackgroundTransparency = 1
 settingsTitle.Text = "SETTINGS"
 settingsTitle.TextColor3 = Color3.fromRGB(100, 150, 200)
-settingsTitle.Font = Enum.Font.GothamSemibold
+settingsTitle.Font = Enum.Font.SourceSansSemibold
 settingsTitle.TextSize = 12
 
 local function makeSettingBox(labelText, yPos, defaultText)
@@ -228,7 +235,7 @@ local function makeSettingBox(labelText, yPos, defaultText)
     label.BackgroundTransparency = 1
     label.Text = labelText
     label.TextColor3 = Color3.fromRGB(130, 140, 160)
-    label.Font = Enum.Font.Gotham
+    label.Font = Enum.Font.SourceSans
     label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
 
@@ -240,7 +247,7 @@ local function makeSettingBox(labelText, yPos, defaultText)
     box.PlaceholderColor3 = Color3.fromRGB(80, 90, 110)
     box.Text = defaultText
     box.ClearTextOnFocus = false
-    box.Font = Enum.Font.Gotham
+    box.Font = Enum.Font.SourceSans
     box.TextSize = 11
     box.BorderSizePixel = 0
 
@@ -264,7 +271,7 @@ btnSmooth.Size = UDim2.new(0.48, 0, 0, 24)
 btnSmooth.Position = UDim2.new(0, 8, 0, 376)
 btnSmooth.BackgroundColor3 = Color3.fromRGB(40, 60, 80)
 btnSmooth.Text = "Smooth: ON"
-btnSmooth.Font = Enum.Font.Gotham
+btnSmooth.Font = Enum.Font.SourceSans
 btnSmooth.TextSize = 10
 btnSmooth.TextColor3 = Color3.fromRGB(200, 200, 200)
 btnSmooth.BorderSizePixel = 0
@@ -277,7 +284,7 @@ btnSpeed.Size = UDim2.new(0.48, 0, 0, 24)
 btnSpeed.Position = UDim2.new(0.52, 0, 0, 376)
 btnSpeed.BackgroundColor3 = Color3.fromRGB(40, 60, 80)
 btnSpeed.Text = "Speed: 15"
-btnSpeed.Font = Enum.Font.Gotham
+btnSpeed.Font = Enum.Font.SourceSans
 btnSpeed.TextSize = 10
 btnSpeed.TextColor3 = Color3.fromRGB(200, 200, 200)
 btnSpeed.BorderSizePixel = 0
@@ -294,7 +301,7 @@ consoleTitle.Position = UDim2.new(0, 8, 0, 410)
 consoleTitle.BackgroundTransparency = 1
 consoleTitle.Text = "CONSOLE"
 consoleTitle.TextColor3 = Color3.fromRGB(100, 150, 200)
-consoleTitle.Font = Enum.Font.GothamSemibold
+consoleTitle.Font = Enum.Font.SourceSansSemibold
 consoleTitle.TextSize = 12
 
 local btnClearConsole = Instance.new("TextButton", main)
@@ -302,7 +309,7 @@ btnClearConsole.Size = UDim2.new(0, 40, 0, 18)
 btnClearConsole.Position = UDim2.new(1, -48, 0, 410)
 btnClearConsole.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
 btnClearConsole.Text = "Clear"
-btnClearConsole.Font = Enum.Font.Gotham
+btnClearConsole.Font = Enum.Font.SourceSans
 btnClearConsole.TextSize = 9
 btnClearConsole.TextColor3 = Color3.fromRGB(200,200,200)
 btnClearConsole.BorderSizePixel = 0
@@ -313,7 +320,7 @@ consoleBox.Size = UDim2.new(1, -16, 0, 140)
 consoleBox.Position = UDim2.new(0, 8, 0, 430)
 consoleBox.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
 consoleBox.TextColor3 = Color3.fromRGB(200, 200, 200)
-consoleBox.Font = Enum.Font.GothamMonospace
+consoleBox.Font = Enum.Font.Code   -- FIX: dari GothamMonospace ke Code
 consoleBox.TextSize = 10
 consoleBox.TextXAlignment = Enum.TextXAlignment.Left
 consoleBox.TextYAlignment = Enum.TextYAlignment.Top
@@ -342,7 +349,6 @@ local function addConsoleLog(text, color)
     else
         current = line
     end
-    -- batasi jumlah baris
     local lines = {}
     for l in current:gmatch("[^\n]+") do
         table.insert(lines, l)
@@ -353,7 +359,6 @@ local function addConsoleLog(text, color)
     consoleBox.Text = table.concat(lines, "\n")
 end
 
--- Aktifkan fungsi log global
 consoleLog = addConsoleLog
 
 btnClearConsole.MouseButton1Click:Connect(function()
@@ -455,7 +460,7 @@ local function castRod()
 end
 
 -- ==========================================
--- FISHING: PELACAK BAR MINIGAME
+-- FISHING: PELACAK BAR MINIGAME (tetap)
 -- ==========================================
 local function getFishingElements()
     if cachedWhiteBar and cachedRedBar and cachedWhiteBar.Parent and cachedRedBar.Parent and cachedWhiteBar.Visible and cachedRedBar.Visible then
@@ -506,7 +511,6 @@ local function getFishingElements()
         end
     end
 
-    -- Fallback color detection
     for _, v in pairs(playerGui:GetDescendants()) do
         if v:IsA("GuiObject") and v.Visible and v.AbsoluteSize.X > 15 and v.AbsoluteSize.Y > 6 then
             local c = v.BackgroundColor3
@@ -542,7 +546,7 @@ local function setSpacePressed(pressed, force)
 end
 
 -- ==========================================
--- MINING: CARI CRYSTAL TERDEKAT
+-- MINING: FUNGSI-FUNGSI (tetap, hanya safeRun)
 -- ==========================================
 local function isLikelyCrystal(obj)
     if not (obj:IsA("BasePart") or obj:IsA("MeshPart")) then return false, 0 end
@@ -804,7 +808,7 @@ local function facePart(part)
 end
 
 -- ==========================================
--- MINING: JALAN KE CRYSTAL & TAMBANG
+-- MINING: ROUTINE (dengan safeRun)
 -- ==========================================
 local function mineRoutine()
     miningActive = true
@@ -903,7 +907,7 @@ local function mineRoutine()
 end
 
 -- ==========================================
--- FISHING MINIGAME HANDLER (Heartbeat) - dengan error catching
+-- FISHING MINIGAME HANDLER (Heartbeat) - safeRun
 -- ==========================================
 RunService.Heartbeat:Connect(function()
     if mode ~= "FISH" then
@@ -1017,7 +1021,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================================
--- FISHING EQUIP + CAST LOOP (error catching)
+-- FISHING EQUIP + CAST LOOP
 -- ==========================================
 task.spawn(function()
     while true do
@@ -1227,4 +1231,3 @@ warn("=== INDO HANGOUT BOT LOADED ===")
 warn("Tombol FISH = Auto Mancing")
 warn("Tombol MINE = Auto Nambang Crystal")
 warn("Jika crystal tidak ditemukan, cek output untuk scan nama object")
-warn("Konsol bawaan menampilkan semua log dan ERROR (merah)")
