@@ -87,11 +87,11 @@ local FISH_TOOL_NAMES      = {"Fishing Rod", "Rod", "Pancing", "FishingRod"}
 local MINE_TOOL_NAMES      = {"Pickaxe", "Cangkul", "Kapak", "Mining", "Pick", "Hammer"}
 local CRYSTAL_NAMES        = {"8sisi", "Crystal", "Kristal", "Gem", "Ore", "Batu"}
 local CRYSTAL_MATERIAL     = Enum.Material.Neon
-local MINE_STOP_DISTANCE   = 2.75
+local MINE_STOP_DISTANCE   = 2.3
 local MINE_MAX_SCAN_DISTANCE = 260
 local PATH_RETRY_DELAY     = 0.35
 local MINE_SMOOTH_MOVE     = true
-local MINE_WALK_SPEED      = 15
+local MINE_WALK_SPEED      = 24
 
 -- ==========================================
 -- LOGGING
@@ -437,7 +437,7 @@ local btnSpeed = Instance.new("TextButton", main)
 btnSpeed.Size = UDim2.new(0.48, 0, 0, 24)
 btnSpeed.Position = UDim2.new(0.52, 0, 0, 378)
 btnSpeed.BackgroundColor3 = Color3.fromRGB(40, 60, 80)
-btnSpeed.Text = "Speed: 15"; btnSpeed.Font = Enum.Font.SourceSans; btnSpeed.TextSize = 10
+btnSpeed.Text = "Speed: 24"; btnSpeed.Font = Enum.Font.SourceSans; btnSpeed.TextSize = 10
 btnSpeed.TextColor3 = Color3.fromRGB(200, 200, 200); btnSpeed.BorderSizePixel = 0
 Instance.new("UICorner", btnSpeed).CornerRadius = UDim.new(0, 3)
 
@@ -1022,7 +1022,7 @@ local function getMiningStandPoint(crystal)
     if not char or not char.PrimaryPart then return nil end
     local origin = crystal.Position
     local cw     = math.max(crystal.Size.X, crystal.Size.Z)
-    local radius = math.clamp(cw * 0.28 + 1.9, MINE_STOP_DISTANCE, 4.2)
+    local radius = math.clamp(cw * 0.25 + 1.5, MINE_STOP_DISTANCE, 3.8)
     local ignore = {char, crystal}
     local bestPos, bestScore = nil, math.huge
     for i = 1, 16 do
@@ -1052,6 +1052,12 @@ end
 local function moveToPosition(hum, targetPos, targetPart)
     local char = player.Character
     if not char or not char.PrimaryPart then return false end
+    
+    -- Simulasikan Shift untuk berlari (Sprint)
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.LeftShift, false, game)
+    end)
+    
     local path = PathfindingService:CreatePath({
         AgentRadius = 1.9, AgentHeight = 5.2,
         AgentCanJump = true, AgentCanClimb = true,
@@ -1065,23 +1071,40 @@ local function moveToPosition(hum, targetPos, targetPart)
     else
         wps = {{Position = targetPos, Action = Enum.PathWaypointAction.Walk}}
     end
+    
     local orig     = hum.WalkSpeed
     hum.WalkSpeed  = MINE_SMOOTH_MOVE and MINE_WALK_SPEED + math.random(-1,1) or MINE_WALK_SPEED
     local lastPos  = char.PrimaryPart.Position
     local stuckFor = 0
+    local success  = false
+
     for index, wp in ipairs(wps) do
-        if mode ~= "MINE" or not InstanceManager.Active then hum.WalkSpeed = orig; return false end
-        if targetPart and not targetPart.Parent then hum.WalkSpeed = orig; return false end
+        if mode ~= "MINE" or not InstanceManager.Active then break end
+        if targetPart and not targetPart.Parent then break end
         if wp.Action == Enum.PathWaypointAction.Jump then hum.Jump = true end
         hum:MoveTo(wp.Position)
         local started = os.clock()
         while mode == "MINE" and InstanceManager.Active and os.clock()-started < 4.5 do
             task.wait(MINE_SMOOTH_MOVE and 0.08 or 0.15)
-            if not char.PrimaryPart then hum.WalkSpeed = orig; return false end
-            local cur   = char.PrimaryPart.Position
-            local reach = (MINE_SMOOTH_MOVE and index < #wps) and 5.2 or 2.4
+            if not char.PrimaryPart then break end
+            local cur = char.PrimaryPart.Position
+            
+            -- Cek kedekatan langsung ke fisik crystal agar tidak mentok collision box & nyangkut
+            if targetPart and targetPart.Parent then
+                local distToCrystal = (cur - targetPart.Position).Magnitude
+                local cw = math.max(targetPart.Size.X, targetPart.Size.Z)
+                if distToCrystal <= (cw * 0.5 + 2.2) then
+                    success = true
+                    break
+                end
+            end
+
+            local reach = (MINE_SMOOTH_MOVE and index < #wps) and 5.2 or 1.0
             if (cur - wp.Position).Magnitude <= reach then break end
-            if (cur - targetPos).Magnitude <= 2.1 then hum.WalkSpeed = orig; return true end
+            if (cur - targetPos).Magnitude <= 1.0 then 
+                success = true
+                break 
+            end
             if (cur - lastPos).Magnitude < 0.2 then
                 stuckFor = stuckFor + (MINE_SMOOTH_MOVE and 0.08 or 0.15)
                 if stuckFor > 1.1 then
@@ -1090,13 +1113,21 @@ local function moveToPosition(hum, targetPos, targetPart)
                     if rec.Magnitude < 0.1 then rec = Vector3.new(1,0,0) end
                     hum:MoveTo(cur + rec.Unit * 5)
                     task.wait(PATH_RETRY_DELAY)
-                    hum.WalkSpeed = orig; return false
+                    break
                 end
             else stuckFor = 0; lastPos = cur end
         end
+        if success then break end
     end
+
+    -- Kembalikan WalkSpeed & Matikan Sprint Key
     hum.WalkSpeed = orig
-    return char.PrimaryPart and (char.PrimaryPart.Position - targetPos).Magnitude <= 2.4
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.LeftShift, false, game)
+    end)
+    
+    if success then return true end
+    return char.PrimaryPart and (char.PrimaryPart.Position - targetPos).Magnitude <= 1.5
 end
 
 local function facePart(part)
@@ -1134,13 +1165,25 @@ local function mineRoutine()
                 task.wait(3); return
             end
 
-            local standPoint = getMiningStandPoint(crystal)
-            if standPoint and (char.PrimaryPart.Position - standPoint).Magnitude > 2.0 then
-                local arrived = moveToPosition(hum, standPoint, crystal)
-                if not arrived then
-                    miningFailCount = miningFailCount + 1
-                    if miningFailCount >= 3 then currentMiningTarget = nil end
-                    task.wait(0.4); return
+            -- Cek apakah sudah berada dalam jarak tambang yang cukup dekat tanpa perlu jalan
+            local needMove = true
+            if crystal and crystal.Parent then
+                local cur = char.PrimaryPart.Position
+                local cw = math.max(crystal.Size.X, crystal.Size.Z)
+                if (cur - crystal.Position).Magnitude <= (cw * 0.5 + 2.2) then
+                    needMove = false
+                end
+            end
+
+            if needMove then
+                local standPoint = getMiningStandPoint(crystal)
+                if standPoint and (char.PrimaryPart.Position - standPoint).Magnitude > 1.2 then
+                    local arrived = moveToPosition(hum, standPoint, crystal)
+                    if not arrived then
+                        miningFailCount = miningFailCount + 1
+                        if miningFailCount >= 3 then currentMiningTarget = nil end
+                        task.wait(0.4); return
+                    end
                 end
             end
 
@@ -1197,9 +1240,9 @@ end)
 
 btnSpeed.MouseButton1Click:Connect(function()
     if not InstanceManager.Active then return end
-    if MINE_WALK_SPEED == 15 then MINE_WALK_SPEED = 13
-    elseif MINE_WALK_SPEED == 13 then MINE_WALK_SPEED = 16
-    else MINE_WALK_SPEED = 15 end
+    if MINE_WALK_SPEED == 24 then MINE_WALK_SPEED = 16
+    elseif MINE_WALK_SPEED == 16 then MINE_WALK_SPEED = 20
+    else MINE_WALK_SPEED = 24 end
     btnSpeed.Text = "Speed: " .. tostring(MINE_WALK_SPEED)
 end)
 
@@ -1221,8 +1264,11 @@ local function forceTurnOffFish()
     btnFish.BackgroundColor3 = Color3.fromRGB(35, 45, 70)
     btnFishStroke.Color = Color3.fromRGB(60, 120, 200)
     
-    -- Paksa lepas tombol Space
-    pcall(function() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game) end)
+    -- Paksa lepas tombol Space & LeftShift
+    pcall(function() 
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game) 
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.LeftShift, false, game)
+    end)
     isSpacePressed = false
     
     -- Paksa reset semua state & matikan indikator (dots abu-abu)
@@ -1272,6 +1318,7 @@ btnMine.MouseButton1Click:Connect(function()
         pcall(function()
             local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
             if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true) end
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.LeftShift, false, game)
         end)
     else
         -- Matikan fish jika sedang aktif
