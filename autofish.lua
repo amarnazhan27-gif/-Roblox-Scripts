@@ -32,6 +32,9 @@ local cachedRedBar = nil
 local lastGuiScan = 0
 local fishCaughtCount = 0
 local crystalMinedCount = 0
+local currentMiningTarget = nil
+local miningFailCount = 0
+local miningHitCount = 0
 
 -- Nama tool yang akan dicari (auto-detect fallback)
 local FISH_TOOL_NAMES = {"Fishing Rod", "Rod", "Pancing", "FishingRod"}
@@ -208,6 +211,10 @@ local function updateResultLabels()
     resultMineLabel.Text = "Crystal mined: " .. tostring(crystalMinedCount)
 end
 
+local function setStatus(text)
+    statusLabel.Text = text .. " | F:" .. tostring(fishCaughtCount) .. " M:" .. tostring(crystalMinedCount)
+end
+
 -- ==========================================
 -- HELPER: CARI TOOL DI BACKPACK/CHAR
 -- ==========================================
@@ -274,7 +281,7 @@ local function castRod()
         if not cam then return end
         local screenCenter = cam.ViewportSize / 2
         fishingState = "CASTING"
-        statusLabel.Text = "Fish: Melempar umpan..."
+        setStatus("Fish: Melempar umpan")
         warn("[FISH] Melempar umpan...")
         local tool = player.Character and player.Character:FindFirstChildWhichIsA("Tool")
         if tool then
@@ -289,7 +296,7 @@ local function castRod()
         lastCastTime = os.clock()
         if mode == "FISH" and fishingState == "CASTING" then
             fishingState = "WAITING"
-            statusLabel.Text = "Fish: Menunggu gigitan..."
+            setStatus("Fish: Menunggu gigitan")
         end
         warn("[FISH] Umpan dilempar, menunggu gigitan...")
     end)
@@ -306,7 +313,7 @@ local function getFishingElements()
     end
 
     local now = os.clock()
-    if now - lastGuiScan < 0.2 then
+    if now - lastGuiScan < 0.12 then
         return nil, nil
     end
     lastGuiScan = now
@@ -318,12 +325,13 @@ local function getFishingElements()
 
     for _, v in pairs(playerGui:GetDescendants()) do
         local lowerName = v.Name:lower()
-        if (lowerName == "whitebar" or lowerName:find("white")) and v:IsA("GuiObject") then
+        if (lowerName == "whitebar" or lowerName:find("white") or lowerName:find("playerbar")) and v:IsA("GuiObject") then
             local parent = v.Parent
-            local red = parent and (parent:FindFirstChild("RedBar") or parent:FindFirstChild("redbar"))
+            local red = parent and (parent:FindFirstChild("RedBar") or parent:FindFirstChild("redbar") or parent:FindFirstChild("TargetBar"))
             if not red and parent then
                 for _, sibling in ipairs(parent:GetChildren()) do
-                    if sibling:IsA("GuiObject") and sibling.Name:lower():find("red") then
+                    local sname = sibling.Name:lower()
+                    if sibling:IsA("GuiObject") and (sname:find("red") or sname:find("target") or sname:find("goal")) then
                         red = sibling
                         break
                     end
@@ -358,6 +366,21 @@ local function getFishingElements()
     cachedWhiteBar = fallbackWhite
     cachedRedBar = fallbackRed
     return fallbackWhite, fallbackRed
+end
+
+local function hasFishingActivityGui()
+    local playerGui = player:FindFirstChild("PlayerGui")
+    if not playerGui then return false end
+    for _, v in ipairs(playerGui:GetDescendants()) do
+        local name = v.Name:lower()
+        if v:IsA("GuiObject") and v.Visible and (name:find("fish") or name:find("bar") or name:find("minigame")) then
+            local size = v.AbsoluteSize
+            if size.X > 20 and size.Y > 4 then
+                return true
+            end
+        end
+    end
+    return false
 end
 
 local function setSpacePressed(pressed, force)
@@ -435,25 +458,6 @@ local function belongsToOtherPlayer(obj)
         cursor = cursor.Parent
     end
 
-    local root = obj.Parent or obj
-    for _, desc in ipairs(root:GetDescendants()) do
-        if desc:IsA("TextLabel") or desc:IsA("TextButton") then
-            local text = desc.Text or ""
-            if text ~= "" and not text:lower():find(player.Name:lower()) and not text:lower():find(player.DisplayName:lower()) then
-                for _, other in ipairs(Players:GetPlayers()) do
-                    if other ~= player then
-                        local name = other.Name:lower()
-                        local display = other.DisplayName:lower()
-                        local lowerText = text:lower()
-                        if lowerText:find(name) or lowerText:find(display) then
-                            return true
-                        end
-                    end
-                end
-            end
-        end
-    end
-
     return false
 end
 
@@ -461,6 +465,14 @@ local function findNearestCrystal()
     local char = player.Character
     if not char or not char.PrimaryPart then return nil end
     local myPos = char.PrimaryPart.Position
+
+    if currentMiningTarget and currentMiningTarget.Parent and not belongsToOtherPlayer(currentMiningTarget) then
+        local lockedDist = (currentMiningTarget.Position - myPos).Magnitude
+        if lockedDist < MINE_MAX_SCAN_DISTANCE and miningFailCount < 3 then
+            return currentMiningTarget, lockedDist
+        end
+    end
+
     local nearest = nil
     local nearestValue = math.huge
     local nearestDist = math.huge
@@ -479,6 +491,8 @@ local function findNearestCrystal()
             end
         end
     end
+    currentMiningTarget = nearest
+    miningFailCount = 0
     return nearest, nearestDist
 end
 
@@ -657,19 +671,19 @@ local function mineRoutine()
         local crystal, dist = findNearestCrystal()
 
         if not crystal then
-            statusLabel.Text = "Mining: Crystal not found!"
+            setStatus("Mining: Crystal not found")
             warn("[MINE] Crystal tidak ditemukan. Scan workspace...")
             task.wait(3)
             continue
         end
 
-        statusLabel.Text = "Mining: " .. crystal.Name .. " (" .. math.floor(dist) .. " stud)"
+        setStatus("Mining: " .. crystal.Name .. " (" .. math.floor(dist) .. " stud)")
         warn("[MINE] Crystal ditemukan: " .. crystal.Name .. " jarak: " .. math.floor(dist))
 
         -- Equip pickaxe
         local tool = equipTool(MINE_TOOL_NAMES)
         if not tool then
-            statusLabel.Text = "Mining: No pickaxe found!"
+            setStatus("Mining: No pickaxe")
             warn("[MINE] Tidak ada pickaxe di backpack!")
             task.wait(3)
             continue
@@ -681,6 +695,10 @@ local function mineRoutine()
             warn("[MINE] Pathfinding ke sisi crystal...")
             local arrived = moveToPosition(hum, standPoint, crystal)
             if not arrived then
+                miningFailCount = miningFailCount + 1
+                if miningFailCount >= 3 then
+                    currentMiningTarget = nil
+                end
                 task.wait(0.4)
                 continue
             end
@@ -718,7 +736,17 @@ local function mineRoutine()
                 if minedThisTarget or crystal.Parent == nil then
                     crystalMinedCount = crystalMinedCount + 1
                     updateResultLabels()
-                    statusLabel.Text = "Mining: Crystal mined"
+                    setStatus("Mining: Crystal mined")
+                    currentMiningTarget = nil
+                    miningFailCount = 0
+                else
+                    miningHitCount = miningHitCount + 1
+                    if miningHitCount >= 3 then
+                        crystalMinedCount = crystalMinedCount + 1
+                        miningHitCount = 0
+                        updateResultLabels()
+                        setStatus("Mining: Hit confirmed")
+                    end
                 end
             else
                 -- Crystal tidak terlihat di layar, coba activate tool
@@ -758,7 +786,7 @@ RunService.Heartbeat:Connect(function()
             lastWhiteSample = os.clock()
             whiteVelocity = 0
             fishingState = "MINIGAME"
-            statusLabel.Text = "Fish: Minigame!"
+            setStatus("Fish: Minigame")
             warn("[FISH] Minigame dimulai!")
         end
 
@@ -802,12 +830,12 @@ RunService.Heartbeat:Connect(function()
             nextCastTime = os.clock() + FISH_RECAST_DELAY
             fishCaughtCount = fishCaughtCount + 1
             updateResultLabels()
-            statusLabel.Text = "Fish: Ikan didapat, siap ulang..."
+            setStatus("Fish: Ikan didapat")
             warn("[FISH] Minigame selesai!")
         elseif fishingState == "COOLDOWN" then
             if os.clock() - lastMinigameTime >= FISH_RECAST_DELAY then
                 fishingState = "IDLE"
-                statusLabel.Text = "Fish: Siap melempar..."
+                setStatus("Fish: Siap melempar")
             end
         end
     end
@@ -836,23 +864,23 @@ task.spawn(function()
         if tool and not isCasting then
             local now = os.clock()
             if (fishingState == "IDLE" and now >= nextCastTime) or
-               (fishingState == "WAITING" and (now - lastCastTime) >= FISH_WAIT_TIMEOUT) then
+               (fishingState == "WAITING" and (now - lastCastTime) >= FISH_WAIT_TIMEOUT and not hasFishingActivityGui()) then
                 if fishingState == "WAITING" then
-                    statusLabel.Text = "Fish: Lempar ulang..."
+                    setStatus("Fish: Lempar ulang")
                     warn("[FISH] Timeout gigitan, casting ulang")
                 else
-                    statusLabel.Text = "Fish: Siap melempar..."
+                    setStatus("Fish: Siap melempar")
                 end
                 task.spawn(castRod)
             elseif fishingState == "WAITING" then
-                statusLabel.Text = "Fish: Menunggu gigitan..."
+                setStatus("Fish: Menunggu gigitan")
             elseif fishingState == "CASTING" then
-                statusLabel.Text = "Fish: Melempar umpan..."
+                setStatus("Fish: Melempar umpan")
             elseif fishingState == "COOLDOWN" then
-                statusLabel.Text = "Fish: Siap ulang..."
+                setStatus("Fish: Siap ulang")
             end
         elseif not tool then
-            statusLabel.Text = "Fish: Tidak ada rod!"
+            setStatus("Fish: Tidak ada rod")
         end
     end
 end)
@@ -917,9 +945,12 @@ btnFish.MouseButton1Click:Connect(function()
         nextCastTime = 0
         lastMinigameGuiSeen = 0
         lastWhiteCenter = nil
+        cachedWhiteBar = nil
+        cachedRedBar = nil
+        lastGuiScan = 0
         whiteVelocity = 0
         isCasting = false
-        statusLabel.Text = "Status: OFF"
+        setStatus("Status: OFF")
 
         if isSpacePressed then
             setSpacePressed(false, true)
@@ -939,8 +970,11 @@ btnFish.MouseButton1Click:Connect(function()
         nextCastTime = 0
         lastMinigameGuiSeen = 0
         lastWhiteCenter = nil
+        cachedWhiteBar = nil
+        cachedRedBar = nil
+        lastGuiScan = 0
         whiteVelocity = 0
-        statusLabel.Text = "Fish: Aktif..."
+        setStatus("Fish: Aktif")
         warn("[SYSTEM] Mode FISHING aktif")
     end
 end)
@@ -954,7 +988,7 @@ btnMine.MouseButton1Click:Connect(function()
         mode = "OFF"
         btnMine.Text = "Auto Mining: OFF"
         btnMine.BackgroundColor3 = Color3.fromRGB(38, 40, 45)
-        statusLabel.Text = "Status: OFF"
+        setStatus("Status: OFF")
 
         pcall(function()
             local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
@@ -963,6 +997,9 @@ btnMine.MouseButton1Click:Connect(function()
     else
         -- Nyalakan mine, matikan fish
         mode = "MINE"
+        currentMiningTarget = nil
+        miningFailCount = 0
+        miningHitCount = 0
         btnMine.Text = "Auto Mining: ON"
         btnMine.BackgroundColor3 = Color3.fromRGB(42, 92, 71)
         btnFish.Text = "Auto Fishing: OFF"
@@ -979,8 +1016,11 @@ btnMine.MouseButton1Click:Connect(function()
         nextCastTime = 0
         lastMinigameGuiSeen = 0
         lastWhiteCenter = nil
+        cachedWhiteBar = nil
+        cachedRedBar = nil
+        lastGuiScan = 0
         whiteVelocity = 0
-        statusLabel.Text = "Mine: Aktif..."
+        setStatus("Mine: Aktif")
         warn("[SYSTEM] Mode MINING aktif")
 
         if not miningActive then
