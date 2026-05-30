@@ -30,11 +30,15 @@ local whiteVelocity = 0
 local cachedWhiteBar = nil
 local cachedRedBar = nil
 local lastGuiScan = 0
+local lastFishStatusUpdate = 0
+local lastFishingProgress = 0.5
 local fishCaughtCount = 0
 local crystalMinedCount = 0
 local currentMiningTarget = nil
 local miningFailCount = 0
 local miningHitCount = 0
+local lastSuccessfulIndicatorUpdate = os.clock()
+local indicatorHealthy = true
 
 -- Nama tool yang akan dicari (auto-detect fallback)
 local FISH_TOOL_NAMES = {"Fishing Rod", "Rod", "Pancing", "FishingRod"}
@@ -313,7 +317,7 @@ local function getFishingElements()
     end
 
     local now = os.clock()
-    if now - lastGuiScan < 0.12 then
+    if now - lastGuiScan < 0.06 then
         return nil, nil
     end
     lastGuiScan = now
@@ -324,45 +328,59 @@ local function getFishingElements()
     local fallbackRed = nil
 
     for _, v in pairs(playerGui:GetDescendants()) do
-        local lowerName = v.Name:lower()
-        if (lowerName == "whitebar" or lowerName:find("white") or lowerName:find("playerbar")) and v:IsA("GuiObject") then
+        if v:IsA("GuiObject") and v.Visible then
+            local lowerName = v.Name:lower()
             local parent = v.Parent
-            local red = parent and (parent:FindFirstChild("RedBar") or parent:FindFirstChild("redbar") or parent:FindFirstChild("TargetBar"))
-            if not red and parent then
-                for _, sibling in ipairs(parent:GetChildren()) do
-                    local sname = sibling.Name:lower()
-                    if sibling:IsA("GuiObject") and (sname:find("red") or sname:find("target") or sname:find("goal")) then
-                        red = sibling
-                        break
-                    end
-                end
-            end
-            if red and red:IsA("GuiObject") then
-                cachedWhiteBar = v
-                cachedRedBar = red
-                return v, red
-            end
-        end
 
-        if v:IsA("GuiObject") and v.Visible and v.AbsoluteSize.X > 8 and v.AbsoluteSize.Y > 4 then
-            local c = v.BackgroundColor3
-            if not fallbackWhite and c.R > 0.82 and c.G > 0.82 and c.B > 0.82 then
-                local parent = v.Parent
-                if parent then
+            if (lowerName == "whitebar" or lowerName:match("^whitebar") or lowerName:match("whitebar$") or
+                lowerName == "playerbar" or (lowerName:find("white") and lowerName:find("bar"))) and
+               parent and parent:IsA("GuiObject") then
+
+                local red = parent:FindFirstChild("RedBar") or parent:FindFirstChild("redbar") or
+                            parent:FindFirstChild("TargetBar") or parent:FindFirstChild("targetbar")
+
+                if not red then
                     for _, sibling in ipairs(parent:GetChildren()) do
-                        if sibling:IsA("GuiObject") and sibling.Visible and sibling.AbsoluteSize.X > 8 then
-                            local sc = sibling.BackgroundColor3
-                            if sc.R > 0.55 and sc.G < 0.25 and sc.B < 0.25 then
-                                fallbackWhite = v
-                                fallbackRed = sibling
+                        if sibling ~= v and sibling:IsA("GuiObject") and sibling.Visible then
+                            local sname = sibling.Name:lower()
+                            if sname:find("red") or sname:find("target") or sname:find("goal") or sname:find("indicator") then
+                                red = sibling
                                 break
                             end
+                        end
+                    end
+                end
+
+                if red and red:IsA("GuiObject") and v.AbsoluteSize.X > 10 and v.AbsoluteSize.Y > 5 then
+                    cachedWhiteBar = v
+                    cachedRedBar = red
+                    return v, red
+                end
+            end
+        end
+    end
+
+    -- Fallback color detection (more accurate)
+    for _, v in pairs(playerGui:GetDescendants()) do
+        if v:IsA("GuiObject") and v.Visible and v.AbsoluteSize.X > 15 and v.AbsoluteSize.Y > 6 then
+            local c = v.BackgroundColor3
+            local parent = v.Parent
+
+            if c.R > 0.85 and c.G > 0.85 and c.B > 0.85 and parent and parent:IsA("GuiObject") then
+                for _, sibling in ipairs(parent:GetChildren()) do
+                    if sibling ~= v and sibling:IsA("GuiObject") and sibling.Visible and sibling.AbsoluteSize.X > 15 then
+                        local sc = sibling.BackgroundColor3
+                        if sc.R > 0.52 and sc.G < 0.28 and sc.B < 0.28 then
+                            cachedWhiteBar = v
+                            cachedRedBar = sibling
+                            return v, sibling
                         end
                     end
                 end
             end
         end
     end
+
     cachedWhiteBar = fallbackWhite
     cachedRedBar = fallbackRed
     return fallbackWhite, fallbackRed
@@ -762,7 +780,7 @@ local function mineRoutine()
 end
 
 -- ==========================================
--- FISHING MINIGAME HANDLER (Heartbeat)
+-- FISHING MINIGAME HANDLER (Heartbeat) - IMPROVED
 -- ==========================================
 RunService.Heartbeat:Connect(function()
     if mode ~= "FISH" then
@@ -775,7 +793,7 @@ RunService.Heartbeat:Connect(function()
 
     local white, red = getFishingElements()
 
-    if white and red and white.Visible then
+    if white and red and white.Visible and red.Visible then
         lastMinigameGuiSeen = os.clock()
         -- Minigame aktif
         if not minigameJustStarted then
@@ -786,55 +804,96 @@ RunService.Heartbeat:Connect(function()
             lastWhiteSample = os.clock()
             whiteVelocity = 0
             fishingState = "MINIGAME"
-            setStatus("Fish: Minigame")
+            lastSuccessfulIndicatorUpdate = os.clock()
+            setStatus("Fish: Minigame aktif")
             warn("[FISH] Minigame dimulai!")
         end
 
         local whiteCenter = white.AbsolutePosition.X + (white.AbsoluteSize.X / 2)
         local redCenter = red.AbsolutePosition.X + (red.AbsoluteSize.X / 2)
+        local redLeft = red.AbsolutePosition.X
+        local redRight = red.AbsolutePosition.X + red.AbsoluteSize.X
         local now = os.clock()
-        local dt = math.max(now - lastWhiteSample, 0.016)
+        local dt = math.max(now - lastWhiteSample, 0.012)
+
         if lastWhiteCenter then
             local instantVelocity = (whiteCenter - lastWhiteCenter) / dt
-            whiteVelocity = (whiteVelocity * 0.65) + (instantVelocity * 0.35)
+            -- Improved velocity smoothing: more responsive but stable
+            whiteVelocity = (whiteVelocity * 0.72) + (instantVelocity * 0.28)
         end
         lastWhiteCenter = whiteCenter
         lastWhiteSample = now
 
-        local predictedWhite = whiteCenter + (whiteVelocity * 0.08)
-        local redWidth = math.max(red.AbsoluteSize.X, 1)
-        local tolerance = math.clamp(redWidth * 0.18, 5, 16)
-        local error = redCenter - predictedWhite
+        -- Improved prediction dengan dynamic lookhead
+        local predictedLookhead = math.clamp(math.abs(whiteVelocity) / 2000, 0.04, 0.12)
+        local predictedWhite = whiteCenter + (whiteVelocity * predictedLookhead)
 
-        if error > tolerance then
-            setSpacePressed(true)
-        elseif error < -tolerance then
-            setSpacePressed(false)
-        elseif math.abs(whiteVelocity) > 180 then
-            setSpacePressed(whiteVelocity < 0)
+        local redWidth = math.max(red.AbsoluteSize.X, 1)
+        -- Better tolerance: adaptive based on red bar size
+        local tolerance = math.clamp(redWidth * 0.22, 6, 18)
+
+        -- Check if white bar is inside red bar
+        local isInside = predictedWhite >= (redLeft - tolerance) and predictedWhite <= (redRight + tolerance)
+
+        -- If already inside, use smaller controls
+        if isInside then
+            if whiteCenter < redLeft then
+                setSpacePressed(true)
+            elseif whiteCenter > redRight then
+                setSpacePressed(false)
+            else
+                -- Maintain position with micro movements
+                local centerRed = (redLeft + redRight) / 2
+                local error = whiteCenter - centerRed
+                if math.abs(error) > tolerance * 0.5 then
+                    setSpacePressed(error < 0)
+                end
+            end
+        else
+            -- Chase mode
+            local error = redCenter - predictedWhite
+            if error > tolerance then
+                setSpacePressed(true)
+            elseif error < -tolerance then
+                setSpacePressed(false)
+            elseif math.abs(whiteVelocity) > 200 then
+                setSpacePressed(whiteVelocity < 0)
+            end
         end
+
+        indicatorHealthy = true
+        lastSuccessfulIndicatorUpdate = now
 
     else
         -- Minigame tidak aktif
         if fishingState == "MINIGAME" and os.clock() - lastMinigameGuiSeen < FISH_MINIGAME_GRACE then
             return
         end
+
         minigameJustStarted = false
         setSpacePressed(false, true)
         lastWhiteCenter = nil
         whiteVelocity = 0
 
         if fishingState == "MINIGAME" then
-            fishingState = "COOLDOWN"
+            fishingState = "CATCHING"
             lastMinigameTime = os.clock()
-            nextCastTime = os.clock() + FISH_RECAST_DELAY
-            fishCaughtCount = fishCaughtCount + 1
-            updateResultLabels()
-            setStatus("Fish: Ikan didapat")
-            warn("[FISH] Minigame selesai!")
+            setStatus("Fish: Proses...")
+            warn("[FISH] Minigame selesai, proses penangkapan...")
+        elseif fishingState == "CATCHING" then
+            local catchingDuration = os.clock() - lastMinigameTime
+            if catchingDuration >= 0.5 then
+                fishingState = "COOLDOWN"
+                nextCastTime = os.clock() + FISH_RECAST_DELAY
+                fishCaughtCount = fishCaughtCount + 1
+                updateResultLabels()
+                setStatus("Fish: Ikan didapat!")
+                warn("[FISH] Ikan berhasil ditangkap!")
+            end
         elseif fishingState == "COOLDOWN" then
-            if os.clock() - lastMinigameTime >= FISH_RECAST_DELAY then
+            if os.clock() - lastMinigameTime >= (FISH_RECAST_DELAY + 0.5) then
                 fishingState = "IDLE"
+                nextCastTime = os.clock()
                 setStatus("Fish: Siap melempar")
             end
         end
@@ -842,11 +901,11 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================================
--- FISHING EQUIP + CAST LOOP
+-- FISHING EQUIP + CAST LOOP - IMPROVED
 -- ==========================================
 task.spawn(function()
     while true do
-        task.wait(0.2)
+        task.wait(0.15)
         if mode ~= "FISH" then continue end
 
         local char = player.Character
@@ -863,21 +922,42 @@ task.spawn(function()
 
         if tool and not isCasting then
             local now = os.clock()
-            if (fishingState == "IDLE" and now >= nextCastTime) or
-               (fishingState == "WAITING" and (now - lastCastTime) >= FISH_WAIT_TIMEOUT and not hasFishingActivityGui()) then
-                if fishingState == "WAITING" then
-                    setStatus("Fish: Lempar ulang")
-                    warn("[FISH] Timeout gigitan, casting ulang")
-                else
-                    setStatus("Fish: Siap melempar")
-                end
+            local timeSinceCast = now - lastCastTime
+
+            -- Siap untuk cast?
+            if fishingState == "IDLE" and now >= nextCastTime then
+                setStatus("Fish: Mempersiapkan casting")
                 task.spawn(castRod)
+
+            -- Timeout dari WAITING state
+            elseif fishingState == "WAITING" and timeSinceCast >= FISH_WAIT_TIMEOUT then
+                setStatus("Fish: Timeout, lempar ulang")
+                warn("[FISH] Timeout gigitan untuk " .. string.format("%.1f", timeSinceCast) .. "s, casting ulang")
+                task.spawn(castRod)
+
+            -- Auto recast jika stuck di COOLDOWN
+            elseif fishingState == "COOLDOWN" and now >= nextCastTime then
+                fishingState = "IDLE"
+                nextCastTime = os.clock()
+                setStatus("Fish: Cooldown selesai")
+
+            -- Status updates
             elseif fishingState == "WAITING" then
-                setStatus("Fish: Menunggu gigitan")
+                local waitTime = math.floor(timeSinceCast * 10) / 10
+                setStatus("Fish: Menunggu (" .. string.format("%.1f", waitTime) .. "s)")
+
             elseif fishingState == "CASTING" then
-                setStatus("Fish: Melempar umpan")
+                setStatus("Fish: Melempar...")
+
             elseif fishingState == "COOLDOWN" then
-                setStatus("Fish: Siap ulang")
+                local remaining = math.max(0, nextCastTime - now)
+                setStatus("Fish: Cooldown " .. string.format("%.1f", remaining) .. "s")
+
+            elseif fishingState == "CATCHING" then
+                setStatus("Fish: Menangkap...")
+
+            elseif fishingState == "MINIGAME" then
+                setStatus("Fish: Minigame aktif")
             end
         elseif not tool then
             setStatus("Fish: Tidak ada rod")
