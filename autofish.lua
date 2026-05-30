@@ -38,8 +38,10 @@ local CRYSTAL_MATERIAL = Enum.Material.Neon -- Material 272 = Neon (sesuai file 
 local MINE_STOP_DISTANCE = 3.2
 local MINE_MAX_SCAN_DISTANCE = 260
 local PATH_RETRY_DELAY = 0.35
-local FISH_RECAST_DELAY = 0.75
-local FISH_WAIT_TIMEOUT = 14
+local FISH_RECAST_DELAY = 1.15
+local FISH_WAIT_TIMEOUT = 24
+local MINE_SMOOTH_MOVE = true
+local MINE_WALK_SPEED = 15
 
 -- ==========================================
 -- GUI UTAMA
@@ -50,52 +52,119 @@ gui.ResetOnSpawn = false
 gui.Parent = game:GetService("CoreGui")
 
 local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0, 220, 0, 160)
-main.Position = UDim2.new(1, -230, 0, 100)
-main.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-main.BorderSizePixel = 2
-main.BorderColor3 = Color3.fromRGB(0, 200, 255)
+main.Size = UDim2.new(0, 260, 0, 278)
+main.Position = UDim2.new(1, -275, 0, 95)
+main.BackgroundColor3 = Color3.fromRGB(18, 22, 28)
+main.BorderSizePixel = 0
 main.Active = true
 main.Draggable = true
 
+local mainCorner = Instance.new("UICorner", main)
+mainCorner.CornerRadius = UDim.new(0, 10)
+
+local mainStroke = Instance.new("UIStroke", main)
+mainStroke.Color = Color3.fromRGB(73, 166, 194)
+mainStroke.Thickness = 1.5
+mainStroke.Transparency = 0.1
+
 -- Title
 local title = Instance.new("TextLabel", main)
-title.Size = UDim2.new(1, 0, 0, 28)
-title.BackgroundColor3 = Color3.fromRGB(0, 100, 150)
-title.Text = "INDO HANGOUT BOT"
+title.Size = UDim2.new(1, -20, 0, 30)
+title.Position = UDim2.new(0, 10, 0, 8)
+title.BackgroundTransparency = 1
+title.Text = "INDO HANGOUT"
 title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.GothamBold
 title.TextScaled = true
 
 -- Status label
 local statusLabel = Instance.new("TextLabel", main)
-statusLabel.Size = UDim2.new(1, 0, 0, 22)
-statusLabel.Position = UDim2.new(0, 0, 0, 28)
-statusLabel.BackgroundTransparency = 1
+statusLabel.Size = UDim2.new(1, -20, 0, 28)
+statusLabel.Position = UDim2.new(0, 10, 0, 43)
+statusLabel.BackgroundColor3 = Color3.fromRGB(28, 34, 43)
 statusLabel.Text = "Status: OFF"
-statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+statusLabel.TextColor3 = Color3.fromRGB(215, 235, 240)
 statusLabel.Font = Enum.Font.Code
 statusLabel.TextScaled = true
+local statusCorner = Instance.new("UICorner", statusLabel)
+statusCorner.CornerRadius = UDim.new(0, 6)
 
 -- Tombol FISH
 local btnFish = Instance.new("TextButton", main)
-btnFish.Size = UDim2.new(0.9, 0, 0, 40)
-btnFish.Position = UDim2.new(0.05, 0, 0, 55)
-btnFish.BackgroundColor3 = Color3.fromRGB(50, 100, 200)
+btnFish.Size = UDim2.new(0.92, 0, 0, 38)
+btnFish.Position = UDim2.new(0.04, 0, 0, 80)
+btnFish.BackgroundColor3 = Color3.fromRGB(41, 104, 170)
 btnFish.Text = "🎣 AUTO FISH: OFF"
 btnFish.Font = Enum.Font.GothamBold
 btnFish.TextScaled = true
 btnFish.TextColor3 = Color3.new(1, 1, 1)
+local btnFishCorner = Instance.new("UICorner", btnFish)
+btnFishCorner.CornerRadius = UDim.new(0, 8)
 
 -- Tombol MINE
 local btnMine = Instance.new("TextButton", main)
-btnMine.Size = UDim2.new(0.9, 0, 0, 40)
-btnMine.Position = UDim2.new(0.05, 0, 0, 100)
-btnMine.BackgroundColor3 = Color3.fromRGB(150, 80, 20)
+btnMine.Size = UDim2.new(0.92, 0, 0, 38)
+btnMine.Position = UDim2.new(0.04, 0, 0, 124)
+btnMine.BackgroundColor3 = Color3.fromRGB(167, 101, 38)
 btnMine.Text = "⛏️ AUTO MINE: OFF"
 btnMine.Font = Enum.Font.GothamBold
 btnMine.TextScaled = true
 btnMine.TextColor3 = Color3.new(1, 1, 1)
+local btnMineCorner = Instance.new("UICorner", btnMine)
+btnMineCorner.CornerRadius = UDim.new(0, 8)
+
+local settingsTitle = Instance.new("TextLabel", main)
+settingsTitle.Size = UDim2.new(1, -20, 0, 22)
+settingsTitle.Position = UDim2.new(0, 10, 0, 170)
+settingsTitle.BackgroundTransparency = 1
+settingsTitle.Text = "SETTINGS"
+settingsTitle.TextColor3 = Color3.fromRGB(130, 180, 195)
+settingsTitle.Font = Enum.Font.GothamBold
+settingsTitle.TextScaled = true
+
+local btnSmooth = Instance.new("TextButton", main)
+btnSmooth.Size = UDim2.new(0.44, 0, 0, 32)
+btnSmooth.Position = UDim2.new(0.04, 0, 0, 198)
+btnSmooth.BackgroundColor3 = Color3.fromRGB(35, 132, 92)
+btnSmooth.Text = "Smooth Mine: ON"
+btnSmooth.Font = Enum.Font.GothamSemibold
+btnSmooth.TextScaled = true
+btnSmooth.TextColor3 = Color3.new(1, 1, 1)
+local btnSmoothCorner = Instance.new("UICorner", btnSmooth)
+btnSmoothCorner.CornerRadius = UDim.new(0, 7)
+
+local btnFishWait = Instance.new("TextButton", main)
+btnFishWait.Size = UDim2.new(0.44, 0, 0, 32)
+btnFishWait.Position = UDim2.new(0.52, 0, 0, 198)
+btnFishWait.BackgroundColor3 = Color3.fromRGB(58, 76, 112)
+btnFishWait.Text = "Wait: 24s"
+btnFishWait.Font = Enum.Font.GothamSemibold
+btnFishWait.TextScaled = true
+btnFishWait.TextColor3 = Color3.new(1, 1, 1)
+local btnFishWaitCorner = Instance.new("UICorner", btnFishWait)
+btnFishWaitCorner.CornerRadius = UDim.new(0, 7)
+
+local btnSpeed = Instance.new("TextButton", main)
+btnSpeed.Size = UDim2.new(0.44, 0, 0, 32)
+btnSpeed.Position = UDim2.new(0.04, 0, 0, 236)
+btnSpeed.BackgroundColor3 = Color3.fromRGB(69, 86, 59)
+btnSpeed.Text = "Speed: 15"
+btnSpeed.Font = Enum.Font.GothamSemibold
+btnSpeed.TextScaled = true
+btnSpeed.TextColor3 = Color3.new(1, 1, 1)
+local btnSpeedCorner = Instance.new("UICorner", btnSpeed)
+btnSpeedCorner.CornerRadius = UDim.new(0, 7)
+
+local btnRecast = Instance.new("TextButton", main)
+btnRecast.Size = UDim2.new(0.44, 0, 0, 32)
+btnRecast.Position = UDim2.new(0.52, 0, 0, 236)
+btnRecast.BackgroundColor3 = Color3.fromRGB(90, 66, 112)
+btnRecast.Text = "Recast: 1.2s"
+btnRecast.Font = Enum.Font.GothamSemibold
+btnRecast.TextScaled = true
+btnRecast.TextColor3 = Color3.new(1, 1, 1)
+local btnRecastCorner = Instance.new("UICorner", btnRecast)
+btnRecastCorner.CornerRadius = UDim.new(0, 7)
 
 -- ==========================================
 -- HELPER: CARI TOOL DI BACKPACK/CHAR
@@ -347,7 +416,7 @@ local function moveToPosition(hum, targetPos, targetPart)
         AgentHeight = 5.2,
         AgentCanJump = true,
         AgentCanClimb = true,
-        WaypointSpacing = 3,
+        WaypointSpacing = MINE_SMOOTH_MOVE and 7 or 3,
         Costs = {
             Water = 5,
         },
@@ -364,11 +433,24 @@ local function moveToPosition(hum, targetPos, targetPart)
         waypoints = {{Position = targetPos, Action = Enum.PathWaypointAction.Walk}}
     end
 
+    local originalWalkSpeed = hum.WalkSpeed
+    if MINE_SMOOTH_MOVE then
+        hum.WalkSpeed = MINE_WALK_SPEED + math.random(-1, 1)
+    else
+        hum.WalkSpeed = MINE_WALK_SPEED
+    end
+
     local lastPos = char.PrimaryPart.Position
     local stuckFor = 0
-    for _, waypoint in ipairs(waypoints) do
-        if mode ~= "MINE" then return false end
-        if targetPart and not targetPart.Parent then return false end
+    for index, waypoint in ipairs(waypoints) do
+        if mode ~= "MINE" then
+            hum.WalkSpeed = originalWalkSpeed
+            return false
+        end
+        if targetPart and not targetPart.Parent then
+            hum.WalkSpeed = originalWalkSpeed
+            return false
+        end
 
         if waypoint.Action == Enum.PathWaypointAction.Jump then
             hum.Jump = true
@@ -377,18 +459,23 @@ local function moveToPosition(hum, targetPos, targetPart)
 
         local started = os.clock()
         while mode == "MINE" and os.clock() - started < 4.5 do
-            task.wait(0.15)
-            if not char.PrimaryPart then return false end
+            task.wait(MINE_SMOOTH_MOVE and 0.08 or 0.15)
+            if not char.PrimaryPart then
+                hum.WalkSpeed = originalWalkSpeed
+                return false
+            end
             local currentPos = char.PrimaryPart.Position
-            if (currentPos - waypoint.Position).Magnitude <= 2.4 then
+            local waypointReach = (MINE_SMOOTH_MOVE and index < #waypoints) and 5.2 or 2.4
+            if (currentPos - waypoint.Position).Magnitude <= waypointReach then
                 break
             end
             if (currentPos - targetPos).Magnitude <= 2.6 then
+                hum.WalkSpeed = originalWalkSpeed
                 return true
             end
 
-            if (currentPos - lastPos).Magnitude < 0.25 then
-                stuckFor = stuckFor + 0.15
+            if (currentPos - lastPos).Magnitude < 0.2 then
+                stuckFor = stuckFor + (MINE_SMOOTH_MOVE and 0.08 or 0.15)
                 if stuckFor > 1.1 then
                     hum.Jump = true
                     local recover = targetPos - currentPos
@@ -397,6 +484,7 @@ local function moveToPosition(hum, targetPos, targetPart)
                     end
                     hum:MoveTo(currentPos + recover.Unit * 5)
                     task.wait(PATH_RETRY_DELAY)
+                    hum.WalkSpeed = originalWalkSpeed
                     return false
                 end
             else
@@ -406,6 +494,7 @@ local function moveToPosition(hum, targetPos, targetPart)
         end
     end
 
+    hum.WalkSpeed = originalWalkSpeed
     return char.PrimaryPart and (char.PrimaryPart.Position - targetPos).Magnitude <= 3
 end
 
@@ -620,6 +709,48 @@ task.spawn(function()
             statusLabel.Text = "Fish: Tidak ada rod!"
         end
     end
+end)
+
+-- ==========================================
+-- SETTINGS BUTTONS
+-- ==========================================
+btnSmooth.MouseButton1Click:Connect(function()
+    MINE_SMOOTH_MOVE = not MINE_SMOOTH_MOVE
+    btnSmooth.Text = MINE_SMOOTH_MOVE and "Smooth Mine: ON" or "Smooth Mine: OFF"
+    btnSmooth.BackgroundColor3 = MINE_SMOOTH_MOVE and Color3.fromRGB(35, 132, 92) or Color3.fromRGB(92, 75, 75)
+end)
+
+btnFishWait.MouseButton1Click:Connect(function()
+    if FISH_WAIT_TIMEOUT == 24 then
+        FISH_WAIT_TIMEOUT = 30
+    elseif FISH_WAIT_TIMEOUT == 30 then
+        FISH_WAIT_TIMEOUT = 18
+    else
+        FISH_WAIT_TIMEOUT = 24
+    end
+    btnFishWait.Text = "Wait: " .. tostring(FISH_WAIT_TIMEOUT) .. "s"
+end)
+
+btnSpeed.MouseButton1Click:Connect(function()
+    if MINE_WALK_SPEED == 15 then
+        MINE_WALK_SPEED = 13
+    elseif MINE_WALK_SPEED == 13 then
+        MINE_WALK_SPEED = 16
+    else
+        MINE_WALK_SPEED = 15
+    end
+    btnSpeed.Text = "Speed: " .. tostring(MINE_WALK_SPEED)
+end)
+
+btnRecast.MouseButton1Click:Connect(function()
+    if FISH_RECAST_DELAY == 1.15 then
+        FISH_RECAST_DELAY = 1.8
+    elseif FISH_RECAST_DELAY == 1.8 then
+        FISH_RECAST_DELAY = 0.9
+    else
+        FISH_RECAST_DELAY = 1.15
+    end
+    btnRecast.Text = "Recast: " .. string.format("%.1f", FISH_RECAST_DELAY) .. "s"
 end)
 
 -- ==========================================
