@@ -39,6 +39,7 @@ local miningFailCount = 0
 local miningHitCount = 0
 local lastSuccessfulIndicatorUpdate = os.clock()
 local indicatorHealthy = true
+local minigameStartTime = 0
 
 -- Nama tool yang akan dicari (auto-detect fallback)
 local FISH_TOOL_NAMES = {"Fishing Rod", "Rod", "Pancing", "FishingRod"}
@@ -50,14 +51,16 @@ local CRYSTAL_MATERIAL = Enum.Material.Neon -- Material 272 = Neon (sesuai file 
 local MINE_STOP_DISTANCE = 2.75
 local MINE_MAX_SCAN_DISTANCE = 260
 local PATH_RETRY_DELAY = 0.35
-local FISH_RECAST_DELAY = 0.8
-local FISH_WAIT_TIMEOUT = 10
-local FISH_MINIGAME_GRACE = 0.8
+local FISH_BITE_TIMEOUT = 10          -- Time to wait for minigame to appear after casting
+local FISH_MINIGAME_DURATION = 4      -- Estimated minigame duration
+local FISH_CATCH_DURATION = 0.5       -- Duration to let catch animation play
+local FISH_RECAST_DELAY = 0.8         -- Final delay before next cast
+local FISH_MINIGAME_GRACE = 0.8       -- Grace period for minigame detection
 local MINE_SMOOTH_MOVE = true
 local MINE_WALK_SPEED = 15
 
 -- ==========================================
--- GUI UTAMA
+-- GUI UTAMA - PROFESSIONAL DESIGN
 -- ==========================================
 pcall(function()
     local oldGui = game:GetService("CoreGui"):FindFirstChild("AllInOne_IH")
@@ -70,153 +73,206 @@ gui.ResetOnSpawn = false
 gui.Parent = game:GetService("CoreGui")
 
 local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0, 250, 0, 332)
-main.Position = UDim2.new(1, -265, 0, 86)
-main.BackgroundColor3 = Color3.fromRGB(21, 23, 26)
+main.Size = UDim2.new(0, 300, 0, 420)
+main.Position = UDim2.new(1, -315, 0, 20)
+main.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 main.BorderSizePixel = 0
 main.Active = true
 main.Draggable = true
 
 local mainCorner = Instance.new("UICorner", main)
-mainCorner.CornerRadius = UDim.new(0, 4)
+mainCorner.CornerRadius = UDim.new(0, 6)
 
 local mainStroke = Instance.new("UIStroke", main)
-mainStroke.Color = Color3.fromRGB(50, 53, 58)
-mainStroke.Thickness = 1
+mainStroke.Color = Color3.fromRGB(40, 100, 220)
+mainStroke.Thickness = 2
 mainStroke.Transparency = 0
 
-local title = Instance.new("TextLabel", main)
-title.Size = UDim2.new(1, 0, 0, 28)
-title.Position = UDim2.new(0, 0, 0, 0)
-title.BackgroundColor3 = Color3.fromRGB(28, 31, 35)
-title.Text = "AUTO FARM PANEL"
-title.TextColor3 = Color3.fromRGB(230, 233, 236)
-title.Font = Enum.Font.GothamSemibold
-title.TextScaled = true
+local titleBar = Instance.new("Frame", main)
+titleBar.Size = UDim2.new(1, 0, 0, 40)
+titleBar.Position = UDim2.new(0, 0, 0, 0)
+titleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+titleBar.BorderSizePixel = 0
 
-local statusLabel = Instance.new("TextLabel", main)
-statusLabel.Size = UDim2.new(1, -18, 0, 25)
-statusLabel.Position = UDim2.new(0, 9, 0, 36)
-statusLabel.BackgroundColor3 = Color3.fromRGB(32, 35, 40)
-statusLabel.Text = "Status: OFF"
-statusLabel.TextColor3 = Color3.fromRGB(215, 219, 224)
-statusLabel.Font = Enum.Font.Code
-statusLabel.TextScaled = true
-local statusCorner = Instance.new("UICorner", statusLabel)
-statusCorner.CornerRadius = UDim.new(0, 3)
+local titleBarCorner = Instance.new("UICorner", titleBar)
+titleBarCorner.CornerRadius = UDim.new(0, 6)
+
+local titleLabel = Instance.new("TextLabel", titleBar)
+titleLabel.Size = UDim2.new(1, 0, 1, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "AUTO FARM SYSTEM"
+titleLabel.TextColor3 = Color3.fromRGB(240, 245, 255)
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 16
+
+local statusBar = Instance.new("Frame", main)
+statusBar.Size = UDim2.new(1, -16, 0, 32)
+statusBar.Position = UDim2.new(0, 8, 0, 50)
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
+statusBar.BorderSizePixel = 0
+
+local statusCorner = Instance.new("UICorner", statusBar)
+statusCorner.CornerRadius = UDim.new(0, 4)
+
+local statusLabel = Instance.new("TextLabel", statusBar)
+statusLabel.Size = UDim2.new(1, 0, 1, 0)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "Status: IDLE"
+statusLabel.TextColor3 = Color3.fromRGB(150, 220, 255)
+statusLabel.Font = Enum.Font.GothamMonospace
+statusLabel.TextSize = 13
 
 local btnFish = Instance.new("TextButton", main)
-btnFish.Size = UDim2.new(1, -18, 0, 34)
-btnFish.Position = UDim2.new(0, 9, 0, 72)
-btnFish.BackgroundColor3 = Color3.fromRGB(38, 40, 45)
-btnFish.Text = "Auto Fishing: OFF"
-btnFish.Font = Enum.Font.GothamSemibold
-btnFish.TextScaled = true
-btnFish.TextColor3 = Color3.fromRGB(236, 238, 240)
+btnFish.Size = UDim2.new(1, -16, 0, 36)
+btnFish.Position = UDim2.new(0, 8, 0, 92)
+btnFish.BackgroundColor3 = Color3.fromRGB(35, 45, 70)
+btnFish.Text = "FISHING"
+btnFish.Font = Enum.Font.GothamBold
+btnFish.TextScaled = false
+btnFish.TextSize = 14
+btnFish.TextColor3 = Color3.fromRGB(200, 200, 200)
+btnFish.BorderSizePixel = 0
+
 local btnFishCorner = Instance.new("UICorner", btnFish)
-btnFishCorner.CornerRadius = UDim.new(0, 3)
+btnFishCorner.CornerRadius = UDim.new(0, 4)
+
+local btnFishStroke = Instance.new("UIStroke", btnFish)
+btnFishStroke.Color = Color3.fromRGB(60, 120, 200)
+btnFishStroke.Thickness = 1
 
 local btnMine = Instance.new("TextButton", main)
-btnMine.Size = UDim2.new(1, -18, 0, 34)
-btnMine.Position = UDim2.new(0, 9, 0, 112)
-btnMine.BackgroundColor3 = Color3.fromRGB(38, 40, 45)
-btnMine.Text = "Auto Mining: OFF"
-btnMine.Font = Enum.Font.GothamSemibold
-btnMine.TextScaled = true
-btnMine.TextColor3 = Color3.fromRGB(236, 238, 240)
+btnMine.Size = UDim2.new(1, -16, 0, 36)
+btnMine.Position = UDim2.new(0, 8, 0, 136)
+btnMine.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+btnMine.Text = "MINING"
+btnMine.Font = Enum.Font.GothamBold
+btnMine.TextScaled = false
+btnMine.TextSize = 14
+btnMine.TextColor3 = Color3.fromRGB(200, 200, 200)
+btnMine.BorderSizePixel = 0
+
 local btnMineCorner = Instance.new("UICorner", btnMine)
-btnMineCorner.CornerRadius = UDim.new(0, 3)
+btnMineCorner.CornerRadius = UDim.new(0, 4)
 
-local settingsTitle = Instance.new("TextLabel", main)
-settingsTitle.Size = UDim2.new(1, -18, 0, 21)
-settingsTitle.Position = UDim2.new(0, 9, 0, 154)
-settingsTitle.BackgroundTransparency = 1
-settingsTitle.Text = "Settings"
-settingsTitle.TextColor3 = Color3.fromRGB(170, 175, 182)
-settingsTitle.Font = Enum.Font.GothamSemibold
-settingsTitle.TextScaled = true
+local btnMineStroke = Instance.new("UIStroke", btnMine)
+btnMineStroke.Color = Color3.fromRGB(80, 80, 100)
+btnMineStroke.Thickness = 1
 
-local btnSmooth = Instance.new("TextButton", main)
-btnSmooth.Size = UDim2.new(0.47, -4, 0, 30)
-btnSmooth.Position = UDim2.new(0, 9, 0, 181)
-btnSmooth.BackgroundColor3 = Color3.fromRGB(42, 92, 71)
-btnSmooth.Text = "Smooth: ON"
-btnSmooth.Font = Enum.Font.GothamSemibold
-btnSmooth.TextScaled = true
-btnSmooth.TextColor3 = Color3.fromRGB(235, 238, 240)
-local btnSmoothCorner = Instance.new("UICorner", btnSmooth)
-btnSmoothCorner.CornerRadius = UDim.new(0, 3)
-
-local btnSpeed = Instance.new("TextButton", main)
-btnSpeed.Size = UDim2.new(0.47, -4, 0, 30)
-btnSpeed.Position = UDim2.new(0.53, -5, 0, 181)
-btnSpeed.BackgroundColor3 = Color3.fromRGB(48, 55, 43)
-btnSpeed.Text = "Speed: 15"
-btnSpeed.Font = Enum.Font.GothamSemibold
-btnSpeed.TextScaled = true
-btnSpeed.TextColor3 = Color3.fromRGB(235, 238, 240)
-local btnSpeedCorner = Instance.new("UICorner", btnSpeed)
-btnSpeedCorner.CornerRadius = UDim.new(0, 3)
-
-local function makeSettingBox(labelText, yPos, defaultText)
-    local label = Instance.new("TextLabel", main)
-    label.Size = UDim2.new(0.52, -12, 0, 25)
-    label.Position = UDim2.new(0, 10, 0, yPos)
-    label.BackgroundTransparency = 1
-    label.Text = labelText
-    label.TextColor3 = Color3.fromRGB(190, 195, 200)
-    label.Font = Enum.Font.Gotham
-    label.TextScaled = true
-    label.TextXAlignment = Enum.TextXAlignment.Left
-
-    local box = Instance.new("TextBox", main)
-    box.Size = UDim2.new(0.42, 0, 0, 25)
-    box.Position = UDim2.new(0.56, 0, 0, yPos)
-    box.BackgroundColor3 = Color3.fromRGB(31, 34, 39)
-    box.TextColor3 = Color3.fromRGB(235, 238, 240)
-    box.PlaceholderColor3 = Color3.fromRGB(130, 134, 140)
-    box.Text = defaultText
-    box.ClearTextOnFocus = false
-    box.Font = Enum.Font.Code
-    box.TextScaled = true
-    local corner = Instance.new("UICorner", box)
-    corner.CornerRadius = UDim.new(0, 3)
-    return box
-end
+local statLabel = Instance.new("TextLabel", main)
+statLabel.Size = UDim2.new(1, 0, 0, 18)
+statLabel.Position = UDim2.new(0, 0, 0, 182)
+statLabel.BackgroundTransparency = 1
+statLabel.Text = "STATISTICS"
+statLabel.TextColor3 = Color3.fromRGB(100, 150, 200)
+statLabel.Font = Enum.Font.GothamSemibold
+statLabel.TextSize = 12
 
 local resultFishLabel = Instance.new("TextLabel", main)
-resultFishLabel.Size = UDim2.new(0.47, -4, 0, 24)
-resultFishLabel.Position = UDim2.new(0, 9, 0, 214)
-resultFishLabel.BackgroundColor3 = Color3.fromRGB(31, 34, 39)
-resultFishLabel.Text = "Fish caught: 0"
-resultFishLabel.TextColor3 = Color3.fromRGB(210, 214, 220)
-resultFishLabel.Font = Enum.Font.Gotham
-resultFishLabel.TextScaled = true
+resultFishLabel.Size = UDim2.new(0.5, -10, 0, 28)
+resultFishLabel.Position = UDim2.new(0, 8, 0, 204)
+resultFishLabel.BackgroundColor3 = Color3.fromRGB(25, 40, 60)
+resultFishLabel.Text = "Fish: 0"
+resultFishLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
+resultFishLabel.Font = Enum.Font.GothamSemibold
+resultFishLabel.TextSize = 12
+resultFishLabel.BorderSizePixel = 0
+
 local resultFishCorner = Instance.new("UICorner", resultFishLabel)
 resultFishCorner.CornerRadius = UDim.new(0, 3)
 
 local resultMineLabel = Instance.new("TextLabel", main)
-resultMineLabel.Size = UDim2.new(0.47, -4, 0, 24)
-resultMineLabel.Position = UDim2.new(0.53, -5, 0, 214)
-resultMineLabel.BackgroundColor3 = Color3.fromRGB(31, 34, 39)
-resultMineLabel.Text = "Crystal mined: 0"
-resultMineLabel.TextColor3 = Color3.fromRGB(210, 214, 220)
-resultMineLabel.Font = Enum.Font.Gotham
-resultMineLabel.TextScaled = true
+resultMineLabel.Size = UDim2.new(0.5, -10, 0, 28)
+resultMineLabel.Position = UDim2.new(0.5, 2, 0, 204)
+resultMineLabel.BackgroundColor3 = Color3.fromRGB(45, 40, 25)
+resultMineLabel.Text = "Crystal: 0"
+resultMineLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+resultMineLabel.Font = Enum.Font.GothamSemibold
+resultMineLabel.TextSize = 12
+resultMineLabel.BorderSizePixel = 0
+
 local resultMineCorner = Instance.new("UICorner", resultMineLabel)
 resultMineCorner.CornerRadius = UDim.new(0, 3)
 
-local waitBox = makeSettingBox("Bite wait", 244, tostring(FISH_WAIT_TIMEOUT))
-local recastBox = makeSettingBox("Recast", 272, string.format("%.1f", FISH_RECAST_DELAY))
-local rangeBox = makeSettingBox("Mine range", 300, string.format("%.1f", MINE_STOP_DISTANCE))
+local settingsTitle = Instance.new("TextLabel", main)
+settingsTitle.Size = UDim2.new(1, 0, 0, 18)
+settingsTitle.Position = UDim2.new(0, 0, 0, 242)
+settingsTitle.BackgroundTransparency = 1
+settingsTitle.Text = "SETTINGS"
+settingsTitle.TextColor3 = Color3.fromRGB(100, 150, 200)
+settingsTitle.Font = Enum.Font.GothamSemibold
+settingsTitle.TextSize = 12
+
+local function makeSettingBox(labelText, yPos, defaultText)
+    local label = Instance.new("TextLabel", main)
+    label.Size = UDim2.new(0.55, 0, 0, 20)
+    label.Position = UDim2.new(0, 8, 0, yPos)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    label.TextColor3 = Color3.fromRGB(130, 140, 160)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 11
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local box = Instance.new("TextBox", main)
+    box.Size = UDim2.new(0.38, 0, 0, 20)
+    box.Position = UDim2.new(0.62, 0, 0, yPos)
+    box.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+    box.TextColor3 = Color3.fromRGB(180, 220, 255)
+    box.PlaceholderColor3 = Color3.fromRGB(80, 90, 110)
+    box.Text = defaultText
+    box.ClearTextOnFocus = false
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 11
+    box.BorderSizePixel = 0
+
+    local corner = Instance.new("UICorner", box)
+    corner.CornerRadius = UDim.new(0, 2)
+
+    local stroke = Instance.new("UIStroke", box)
+    stroke.Color = Color3.fromRGB(50, 70, 100)
+    stroke.Thickness = 1
+
+    return box
+end
+
+local waitBox = makeSettingBox("Bite Wait", 266, tostring(FISH_BITE_TIMEOUT))
+local minigameBox = makeSettingBox("Minigame", 292, string.format("%.1f", FISH_MINIGAME_DURATION))
+local recastBox = makeSettingBox("Recast", 318, string.format("%.1f", FISH_RECAST_DELAY))
+local rangeBox = makeSettingBox("Mine Range", 344, string.format("%.1f", MINE_STOP_DISTANCE))
+
+local btnSmooth = Instance.new("TextButton", main)
+btnSmooth.Size = UDim2.new(0.48, 0, 0, 24)
+btnSmooth.Position = UDim2.new(0, 8, 0, 376)
+btnSmooth.BackgroundColor3 = Color3.fromRGB(40, 60, 80)
+btnSmooth.Text = "Smooth: ON"
+btnSmooth.Font = Enum.Font.Gotham
+btnSmooth.TextSize = 10
+btnSmooth.TextColor3 = Color3.fromRGB(200, 200, 200)
+btnSmooth.BorderSizePixel = 0
+
+local btnSmoothCorner = Instance.new("UICorner", btnSmooth)
+btnSmoothCorner.CornerRadius = UDim.new(0, 3)
+
+local btnSpeed = Instance.new("TextButton", main)
+btnSpeed.Size = UDim2.new(0.48, 0, 0, 24)
+btnSpeed.Position = UDim2.new(0.52, 0, 0, 376)
+btnSpeed.BackgroundColor3 = Color3.fromRGB(40, 60, 80)
+btnSpeed.Text = "Speed: 15"
+btnSpeed.Font = Enum.Font.Gotham
+btnSpeed.TextSize = 10
+btnSpeed.TextColor3 = Color3.fromRGB(200, 200, 200)
+btnSpeed.BorderSizePixel = 0
+
+local btnSpeedCorner = Instance.new("UICorner", btnSpeed)
+btnSpeedCorner.CornerRadius = UDim.new(0, 3)
 
 local function updateResultLabels()
-    resultFishLabel.Text = "Fish caught: " .. tostring(fishCaughtCount)
-    resultMineLabel.Text = "Crystal mined: " .. tostring(crystalMinedCount)
+    resultFishLabel.Text = "Fish: " .. tostring(fishCaughtCount)
+    resultMineLabel.Text = "Crystal: " .. tostring(crystalMinedCount)
 end
 
 local function setStatus(text)
-    statusLabel.Text = text .. " | F:" .. tostring(fishCaughtCount) .. " M:" .. tostring(crystalMinedCount)
+    statusLabel.Text = text
 end
 
 -- ==========================================
@@ -285,8 +341,8 @@ local function castRod()
         if not cam then return end
         local screenCenter = cam.ViewportSize / 2
         fishingState = "CASTING"
-        setStatus("Fish: Melempar umpan")
-        warn("[FISH] Melempar umpan...")
+        setStatus("Casting Rod")
+        warn("[FISHING] Casting rod...")
         local tool = player.Character and player.Character:FindFirstChildWhichIsA("Tool")
         if tool then
             pcall(function() tool:Activate() end)
@@ -300,9 +356,9 @@ local function castRod()
         lastCastTime = os.clock()
         if mode == "FISH" and fishingState == "CASTING" then
             fishingState = "WAITING"
-            setStatus("Fish: Menunggu gigitan")
+            setStatus("Waiting for Bite")
         end
-        warn("[FISH] Umpan dilempar, menunggu gigitan...")
+        warn("[FISHING] Rod cast, waiting for bite...")
     end)
     task.wait(0.35)
     isCasting = false
@@ -798,14 +854,14 @@ RunService.Heartbeat:Connect(function()
         -- Minigame aktif
         if not minigameJustStarted then
             minigameJustStarted = true
-            -- Reset paksa Space di awal minigame
+            minigameStartTime = os.clock()
             setSpacePressed(false, true)
             lastWhiteCenter = nil
             lastWhiteSample = os.clock()
             whiteVelocity = 0
             fishingState = "MINIGAME"
             lastSuccessfulIndicatorUpdate = os.clock()
-            setStatus("Fish: Minigame aktif")
+            setStatus("Minigame Detected")
             warn("[FISH] Minigame dimulai!")
         end
 
@@ -878,23 +934,24 @@ RunService.Heartbeat:Connect(function()
         if fishingState == "MINIGAME" then
             fishingState = "CATCHING"
             lastMinigameTime = os.clock()
-            setStatus("Fish: Proses...")
-            warn("[FISH] Minigame selesai, proses penangkapan...")
+            setStatus("Processing Catch")
+            warn("[FISHING] Minigame completed, processing catch...")
         elseif fishingState == "CATCHING" then
             local catchingDuration = os.clock() - lastMinigameTime
-            if catchingDuration >= 0.5 then
+            if catchingDuration >= FISH_CATCH_DURATION then
                 fishingState = "COOLDOWN"
                 nextCastTime = os.clock() + FISH_RECAST_DELAY
                 fishCaughtCount = fishCaughtCount + 1
                 updateResultLabels()
-                setStatus("Fish: Ikan didapat!")
-                warn("[FISH] Ikan berhasil ditangkap!")
+                setStatus("Fish Caught")
+                warn("[FISHING] Fish successfully caught! Total: " .. tostring(fishCaughtCount))
             end
         elseif fishingState == "COOLDOWN" then
-            if os.clock() - lastMinigameTime >= (FISH_RECAST_DELAY + 0.5) then
+            local cooldownDuration = os.clock() - lastMinigameTime
+            if cooldownDuration >= (FISH_CATCH_DURATION + FISH_RECAST_DELAY) then
                 fishingState = "IDLE"
                 nextCastTime = os.clock()
-                setStatus("Fish: Siap melempar")
+                setStatus("Ready to Cast")
             end
         end
     end
@@ -926,38 +983,39 @@ task.spawn(function()
 
             -- Siap untuk cast?
             if fishingState == "IDLE" and now >= nextCastTime then
-                setStatus("Fish: Mempersiapkan casting")
+                setStatus("Preparing Cast")
                 task.spawn(castRod)
 
             -- Timeout dari WAITING state
-            elseif fishingState == "WAITING" and timeSinceCast >= FISH_WAIT_TIMEOUT then
-                setStatus("Fish: Timeout, lempar ulang")
-                warn("[FISH] Timeout gigitan untuk " .. string.format("%.1f", timeSinceCast) .. "s, casting ulang")
+            elseif fishingState == "WAITING" and timeSinceCast >= FISH_BITE_TIMEOUT then
+                setStatus("Bite Timeout - Recasting")
+                warn("[FISH] Timeout gigitan setelah " .. string.format("%.1f", timeSinceCast) .. "s, casting ulang")
                 task.spawn(castRod)
 
             -- Auto recast jika stuck di COOLDOWN
             elseif fishingState == "COOLDOWN" and now >= nextCastTime then
                 fishingState = "IDLE"
                 nextCastTime = os.clock()
-                setStatus("Fish: Cooldown selesai")
+                setStatus("Ready to Cast")
 
             -- Status updates
             elseif fishingState == "WAITING" then
                 local waitTime = math.floor(timeSinceCast * 10) / 10
-                setStatus("Fish: Menunggu (" .. string.format("%.1f", waitTime) .. "s)")
+                setStatus("Waiting for Bite: " .. string.format("%.1f", waitTime) .. "s")
 
             elseif fishingState == "CASTING" then
-                setStatus("Fish: Melempar...")
+                setStatus("Casting Rod")
 
             elseif fishingState == "COOLDOWN" then
                 local remaining = math.max(0, nextCastTime - now)
-                setStatus("Fish: Cooldown " .. string.format("%.1f", remaining) .. "s")
+                setStatus("Cooldown: " .. string.format("%.1f", remaining) .. "s")
 
             elseif fishingState == "CATCHING" then
-                setStatus("Fish: Menangkap...")
+                setStatus("Processing Catch")
 
             elseif fishingState == "MINIGAME" then
-                setStatus("Fish: Minigame aktif")
+                local elapsed = os.clock() - minigameStartTime
+                setStatus("Minigame: " .. string.format("%.1f", elapsed) .. "s")
             end
         elseif not tool then
             setStatus("Fish: Tidak ada rod")
@@ -1001,11 +1059,15 @@ local function readNumberBox(box, fallback, minValue, maxValue, decimals)
 end
 
 waitBox.FocusLost:Connect(function()
-    FISH_WAIT_TIMEOUT = readNumberBox(waitBox, FISH_WAIT_TIMEOUT, 5, 35, nil)
+    FISH_BITE_TIMEOUT = readNumberBox(waitBox, FISH_BITE_TIMEOUT, 5, 35, nil)
+end)
+
+minigameBox.FocusLost:Connect(function()
+    FISH_MINIGAME_DURATION = readNumberBox(minigameBox, FISH_MINIGAME_DURATION, 1.5, 10, 1)
 end)
 
 recastBox.FocusLost:Connect(function()
-    FISH_RECAST_DELAY = readNumberBox(recastBox, FISH_RECAST_DELAY, 0.4, 5, 1)
+    FISH_RECAST_DELAY = readNumberBox(recastBox, FISH_RECAST_DELAY, 0.3, 5, 1)
 end)
 
 rangeBox.FocusLost:Connect(function()
@@ -1019,8 +1081,9 @@ btnFish.MouseButton1Click:Connect(function()
     if mode == "FISH" then
         -- Matikan fish
         mode = "OFF"
-        btnFish.Text = "Auto Fishing: OFF"
-        btnFish.BackgroundColor3 = Color3.fromRGB(38, 40, 45)
+        btnFish.Text = "FISHING"
+        btnFish.BackgroundColor3 = Color3.fromRGB(35, 45, 70)
+        btnFishStroke.Color = Color3.fromRGB(60, 120, 200)
         fishingState = "IDLE"
         nextCastTime = 0
         lastMinigameGuiSeen = 0
@@ -1030,7 +1093,7 @@ btnFish.MouseButton1Click:Connect(function()
         lastGuiScan = 0
         whiteVelocity = 0
         isCasting = false
-        setStatus("Status: OFF")
+        setStatus("System Idle")
 
         if isSpacePressed then
             setSpacePressed(false, true)
@@ -1042,10 +1105,12 @@ btnFish.MouseButton1Click:Connect(function()
     else
         -- Nyalakan fish, matikan mine
         mode = "FISH"
-        btnFish.Text = "Auto Fishing: ON"
-        btnFish.BackgroundColor3 = Color3.fromRGB(42, 92, 71)
-        btnMine.Text = "Auto Mining: OFF"
-        btnMine.BackgroundColor3 = Color3.fromRGB(38, 40, 45)
+        btnFish.Text = "FISHING"
+        btnFish.BackgroundColor3 = Color3.fromRGB(50, 70, 100)
+        btnFishStroke.Color = Color3.fromRGB(100, 180, 255)
+        btnMine.Text = "MINING"
+        btnMine.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+        btnMineStroke.Color = Color3.fromRGB(80, 80, 100)
         fishingState = "IDLE"
         nextCastTime = 0
         lastMinigameGuiSeen = 0
@@ -1054,8 +1119,8 @@ btnFish.MouseButton1Click:Connect(function()
         cachedRedBar = nil
         lastGuiScan = 0
         whiteVelocity = 0
-        setStatus("Fish: Aktif")
-        warn("[SYSTEM] Mode FISHING aktif")
+        setStatus("Fishing Active")
+        warn("[SYSTEM] Fishing Mode Started")
     end
 end)
 
@@ -1066,9 +1131,10 @@ btnMine.MouseButton1Click:Connect(function()
     if mode == "MINE" then
         -- Matikan mine
         mode = "OFF"
-        btnMine.Text = "Auto Mining: OFF"
-        btnMine.BackgroundColor3 = Color3.fromRGB(38, 40, 45)
-        setStatus("Status: OFF")
+        btnMine.Text = "MINING"
+        btnMine.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+        btnMineStroke.Color = Color3.fromRGB(80, 80, 100)
+        setStatus("System Idle")
 
         pcall(function()
             local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
@@ -1080,10 +1146,12 @@ btnMine.MouseButton1Click:Connect(function()
         currentMiningTarget = nil
         miningFailCount = 0
         miningHitCount = 0
-        btnMine.Text = "Auto Mining: ON"
-        btnMine.BackgroundColor3 = Color3.fromRGB(42, 92, 71)
-        btnFish.Text = "Auto Fishing: OFF"
-        btnFish.BackgroundColor3 = Color3.fromRGB(38, 40, 45)
+        btnMine.Text = "MINING"
+        btnMine.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
+        btnMineStroke.Color = Color3.fromRGB(120, 120, 150)
+        btnFish.Text = "FISHING"
+        btnFish.BackgroundColor3 = Color3.fromRGB(35, 45, 70)
+        btnFishStroke.Color = Color3.fromRGB(60, 120, 200)
 
         if isSpacePressed then
             setSpacePressed(false, true)
@@ -1100,8 +1168,8 @@ btnMine.MouseButton1Click:Connect(function()
         cachedRedBar = nil
         lastGuiScan = 0
         whiteVelocity = 0
-        setStatus("Mine: Aktif")
-        warn("[SYSTEM] Mode MINING aktif")
+        setStatus("Mining Active")
+        warn("[SYSTEM] Mining Mode Started")
 
         if not miningActive then
             task.spawn(mineRoutine)
