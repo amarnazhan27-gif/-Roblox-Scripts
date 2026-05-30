@@ -21,6 +21,10 @@ local lastMinigameTime = 0
 local isCasting = false
 local minigameJustStarted = false
 local miningActive = false
+local lastSpaceToggle = 0
+local lastWhiteCenter = nil
+local lastWhiteSample = os.clock()
+local whiteVelocity = 0
 
 -- Nama tool yang akan dicari (auto-detect fallback)
 local FISH_TOOL_NAMES = {"Fishing Rod", "Rod", "Pancing", "FishingRod"}
@@ -29,6 +33,9 @@ local MINE_TOOL_NAMES = {"Pickaxe", "Cangkul", "Kapak", "Mining", "Pick", "Hamme
 -- Nama/properti crystal di workspace
 local CRYSTAL_NAMES = {"8sisi", "Crystal", "Kristal", "Gem", "Ore", "Batu"}
 local CRYSTAL_MATERIAL = Enum.Material.Neon -- Material 272 = Neon (sesuai file map)
+local MINE_STOP_DISTANCE = 6.5
+local MINE_MAX_SCAN_DISTANCE = 260
+local PATH_RETRY_DELAY = 0.35
 
 -- ==========================================
 -- GUI UTAMA
@@ -152,12 +159,19 @@ local function castRod()
         if not cam then return end
         local screenCenter = cam.ViewportSize / 2
         warn("[FISH] Casting...")
+        local tool = player.Character and player.Character:FindFirstChildWhichIsA("Tool")
+        if tool then
+            pcall(function() tool:Activate() end)
+        end
         VirtualUser:Button1Down(screenCenter, cam.CFrame)
-        task.wait(1.8)
+        task.wait(2.15)
         VirtualUser:Button1Up(screenCenter, cam.CFrame)
+        if tool then
+            pcall(function() tool:Deactivate() end)
+        end
         warn("[FISH] Umpan dilempar!")
     end)
-    task.wait(2)
+    task.wait(1.4)
     isCasting = false
 end
 
@@ -168,9 +182,18 @@ local function getFishingElements()
     local playerGui = player:FindFirstChild("PlayerGui")
     if not playerGui then return nil, nil end
     for _, v in pairs(playerGui:GetDescendants()) do
-        if v.Name == "WhiteBar" and v:IsA("GuiObject") then
+        local lowerName = v.Name:lower()
+        if (lowerName == "whitebar" or lowerName:find("white")) and v:IsA("GuiObject") then
             local parent = v.Parent
-            local red = parent and parent:FindFirstChild("RedBar")
+            local red = parent and (parent:FindFirstChild("RedBar") or parent:FindFirstChild("redbar"))
+            if not red and parent then
+                for _, sibling in ipairs(parent:GetChildren()) do
+                    if sibling:IsA("GuiObject") and sibling.Name:lower():find("red") then
+                        red = sibling
+                        break
+                    end
+                end
+            end
             if red and red:IsA("GuiObject") then
                 return v, red
             end
@@ -179,39 +202,206 @@ local function getFishingElements()
     return nil, nil
 end
 
+local function setSpacePressed(pressed, force)
+    if isSpacePressed == pressed then return end
+    local now = os.clock()
+    if not force and now - lastSpaceToggle < 0.035 then return end
+    VirtualInputManager:SendKeyEvent(pressed, Enum.KeyCode.Space, false, game)
+    isSpacePressed = pressed
+    lastSpaceToggle = now
+end
+
 -- ==========================================
 -- MINING: CARI CRYSTAL TERDEKAT
 -- ==========================================
+local function isLikelyCrystal(obj)
+    if not (obj:IsA("BasePart") or obj:IsA("MeshPart")) then return false, 0 end
+
+    local lowerName = obj.Name:lower()
+    local score = 0
+    for _, cname in ipairs(CRYSTAL_NAMES) do
+        if lowerName:find(cname:lower()) then
+            score = score + 4
+            break
+        end
+    end
+    if obj.Material == CRYSTAL_MATERIAL then score = score + 3 end
+    if obj:IsA("MeshPart") then score = score + 1 end
+    if obj.Transparency < 0.85 then score = score + 1 end
+    if obj.CanCollide or obj.CanQuery then score = score + 1 end
+
+    local parent = obj.Parent
+    while parent and parent ~= workspace do
+        local pname = parent.Name:lower()
+        if pname:find("crystal") or pname:find("ore") or pname:find("mine") or pname:find("batu") then
+            score = score + 3
+            break
+        end
+        parent = parent.Parent
+    end
+
+    return score >= 4, score
+end
+
 local function findNearestCrystal()
     local char = player.Character
     if not char or not char.PrimaryPart then return nil end
     local myPos = char.PrimaryPart.Position
     local nearest = nil
+    local nearestValue = math.huge
     local nearestDist = math.huge
 
     for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") or obj:IsA("MeshPart") then
-            -- Deteksi berdasarkan nama ATAU material Neon
-            local nameMatch = false
-            local matMatch = obj.Material == CRYSTAL_MATERIAL
-
-            for _, cname in ipairs(CRYSTAL_NAMES) do
-                if obj.Name:lower():find(cname:lower()) then
-                    nameMatch = true
-                    break
-                end
-            end
-
-            if nameMatch or matMatch then
-                local dist = (obj.Position - myPos).Magnitude
-                if dist < nearestDist and dist < 200 then
+        local ok, score = isLikelyCrystal(obj)
+        if ok then
+            local dist = (obj.Position - myPos).Magnitude
+            if dist < MINE_MAX_SCAN_DISTANCE then
+                local value = dist - (score * 10)
+                if value < nearestValue then
                     nearest = obj
                     nearestDist = dist
+                    nearestValue = value
                 end
             end
         end
     end
     return nearest, nearestDist
+end
+
+local function raycastGround(pos, ignoreList)
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.FilterDescendantsInstances = ignoreList or {}
+    params.IgnoreWater = false
+    return workspace:Raycast(pos + Vector3.new(0, 18, 0), Vector3.new(0, -70, 0), params)
+end
+
+local function hasClearLine(fromPos, toPos, ignoreList)
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.FilterDescendantsInstances = ignoreList or {}
+    local direction = toPos - fromPos
+    local hit = workspace:Raycast(fromPos, direction, params)
+    return not hit or hit.Instance == nil
+end
+
+local function getMiningStandPoint(crystal)
+    local char = player.Character
+    if not char or not char.PrimaryPart then return nil end
+
+    local origin = crystal.Position
+    local radius = math.max(MINE_STOP_DISTANCE, math.max(crystal.Size.X, crystal.Size.Z) * 0.5 + 4)
+    local ignore = {char, crystal}
+    local bestPos = nil
+    local bestScore = math.huge
+
+    for i = 1, 16 do
+        local angle = (math.pi * 2) * (i / 16)
+        local offset = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+        local sample = origin + offset
+        local ground = raycastGround(sample, ignore)
+        if ground and ground.Instance and ground.Normal.Y > 0.55 then
+            local pos = ground.Position + Vector3.new(0, 3, 0)
+            local heightDelta = math.abs(pos.Y - char.PrimaryPart.Position.Y)
+            local crystalHeightDelta = pos.Y - origin.Y
+            if heightDelta < 18 and crystalHeightDelta < 8 then
+                local clearance = hasClearLine(pos + Vector3.new(0, 2, 0), origin, ignore)
+                local score = (pos - char.PrimaryPart.Position).Magnitude + (clearance and 0 or 35) + heightDelta
+                if score < bestScore then
+                    bestScore = score
+                    bestPos = pos
+                end
+            end
+        end
+    end
+
+    if bestPos then return bestPos end
+
+    local delta = char.PrimaryPart.Position - origin
+    local flat = Vector3.new(delta.X, 0, delta.Z)
+    if flat.Magnitude < 1 then flat = Vector3.new(1, 0, 0) end
+    local fallback = origin + flat.Unit * radius
+    local ground = raycastGround(fallback, ignore)
+    return ground and (ground.Position + Vector3.new(0, 3, 0)) or fallback
+end
+
+local function moveToPosition(hum, targetPos, targetPart)
+    local char = player.Character
+    if not char or not char.PrimaryPart then return false end
+
+    local path = PathfindingService:CreatePath({
+        AgentRadius = 2.6,
+        AgentHeight = 5.2,
+        AgentCanJump = true,
+        AgentCanClimb = true,
+        WaypointSpacing = 4,
+        Costs = {
+            Water = 5,
+        },
+    })
+
+    local ok = pcall(function()
+        path:ComputeAsync(char.PrimaryPart.Position, targetPos)
+    end)
+
+    local waypoints = nil
+    if ok and path.Status == Enum.PathStatus.Success then
+        waypoints = path:GetWaypoints()
+    else
+        waypoints = {{Position = targetPos, Action = Enum.PathWaypointAction.Walk}}
+    end
+
+    local lastPos = char.PrimaryPart.Position
+    local stuckFor = 0
+    for _, waypoint in ipairs(waypoints) do
+        if mode ~= "MINE" then return false end
+        if targetPart and not targetPart.Parent then return false end
+
+        if waypoint.Action == Enum.PathWaypointAction.Jump then
+            hum.Jump = true
+        end
+        hum:MoveTo(waypoint.Position)
+
+        local started = os.clock()
+        while mode == "MINE" and os.clock() - started < 4.5 do
+            task.wait(0.15)
+            if not char.PrimaryPart then return false end
+            local currentPos = char.PrimaryPart.Position
+            if (currentPos - waypoint.Position).Magnitude <= 3.3 then
+                break
+            end
+            if (currentPos - targetPos).Magnitude <= 3.8 then
+                return true
+            end
+
+            if (currentPos - lastPos).Magnitude < 0.25 then
+                stuckFor = stuckFor + 0.15
+                if stuckFor > 1.1 then
+                    hum.Jump = true
+                    local recover = targetPos - currentPos
+                    if recover.Magnitude < 0.1 then
+                        recover = Vector3.new(1, 0, 0)
+                    end
+                    hum:MoveTo(currentPos + recover.Unit * 5)
+                    task.wait(PATH_RETRY_DELAY)
+                    return false
+                end
+            else
+                stuckFor = 0
+                lastPos = currentPos
+            end
+        end
+    end
+
+    return char.PrimaryPart and (char.PrimaryPart.Position - targetPos).Magnitude <= 5
+end
+
+local function facePart(part)
+    local char = player.Character
+    if not char or not char.PrimaryPart or not part then return end
+    local pos = char.PrimaryPart.Position
+    local lookAt = Vector3.new(part.Position.X, pos.Y, part.Position.Z)
+    char:SetPrimaryPartCFrame(CFrame.lookAt(pos, lookAt))
 end
 
 -- ==========================================
@@ -223,13 +413,9 @@ local function mineRoutine()
         task.wait(0.5)
         local char = player.Character
         if not char then continue end
+        if not char.PrimaryPart then continue end
         local hum = char:FindFirstChildOfClass("Humanoid")
         if not hum then continue end
-
-        -- Disable lompat saat mine
-        if hum:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
-            hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
-        end
 
         -- Cari crystal terdekat
         local crystal, dist = findNearestCrystal()
@@ -253,28 +439,29 @@ local function mineRoutine()
             continue
         end
 
-        -- Jalan ke crystal
-        if dist > 8 then
-            warn("[MINE] Jalan ke crystal...")
-            hum:MoveTo(crystal.Position)
-            -- Tunggu sampai dekat (max 10 detik)
-            local t = 0
-            while t < 10 and mode == "MINE" do
-                task.wait(0.2)
-                t = t + 0.2
-                local newDist = (char.PrimaryPart.Position - crystal.Position).Magnitude
-                if newDist <= 8 then break end
+        -- Jalan ke titik samping crystal, bukan ke pusatnya, agar tidak naik ke atas batu.
+        local standPoint = getMiningStandPoint(crystal)
+        if standPoint and (char.PrimaryPart.Position - standPoint).Magnitude > 4 then
+            warn("[MINE] Pathfinding ke sisi crystal...")
+            local arrived = moveToPosition(hum, standPoint, crystal)
+            if not arrived then
+                task.wait(0.4)
+                continue
             end
         end
 
         -- Tambang: klik berkali-kali pada crystal
+        facePart(crystal)
         local cam = workspace.CurrentCamera
         if cam then
-            local screenPos, onScreen = cam:WorldToScreenPoint(crystal.Position)
+            local aimPos = crystal.Position + Vector3.new(0, math.clamp(crystal.Size.Y * 0.15, 0.5, 2.5), 0)
+            local screenPos, onScreen = cam:WorldToScreenPoint(aimPos)
             if onScreen then
                 warn("[MINE] Menambang crystal...")
-                for i = 1, 5 do
+                for i = 1, 7 do
                     if mode ~= "MINE" then break end
+                    if crystal.Parent == nil then break end
+                    facePart(crystal)
                     -- Klik di posisi crystal di layar
                     VirtualUser:Button1Down(
                         Vector2.new(screenPos.X, screenPos.Y),
@@ -286,6 +473,7 @@ local function mineRoutine()
                         cam.CFrame
                     )
                     task.wait(0.3)
+                    pcall(function() tool:Activate() end)
                 end
             else
                 -- Crystal tidak terlihat di layar, coba activate tool
@@ -307,8 +495,7 @@ RunService.Heartbeat:Connect(function()
     if mode ~= "FISH" then
         -- Paksa lepas Space jika tidak fishing
         if isSpacePressed then
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-            isSpacePressed = false
+            setSpacePressed(false, true)
         end
         return
     end
@@ -320,10 +507,9 @@ RunService.Heartbeat:Connect(function()
         if not minigameJustStarted then
             minigameJustStarted = true
             -- Reset paksa Space di awal minigame
-            if isSpacePressed then
-                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-                isSpacePressed = false
-            end
+            setSpacePressed(false, true)
+            lastWhiteCenter = nil
+            whiteVelocity = 0
             fishingState = "MINIGAME"
             statusLabel.Text = "Fish: Minigame!"
             warn("[FISH] Minigame dimulai!")
@@ -331,28 +517,34 @@ RunService.Heartbeat:Connect(function()
 
         local whiteCenter = white.AbsolutePosition.X + (white.AbsoluteSize.X / 2)
         local redCenter = red.AbsolutePosition.X + (red.AbsoluteSize.X / 2)
-        -- Toleransi kecil = lebih presisi = lebih sering menang
-        local tolerance = white.AbsoluteSize.X * 0.05
+        local now = os.clock()
+        local dt = math.max(now - lastWhiteSample, 0.016)
+        if lastWhiteCenter then
+            local instantVelocity = (whiteCenter - lastWhiteCenter) / dt
+            whiteVelocity = (whiteVelocity * 0.65) + (instantVelocity * 0.35)
+        end
+        lastWhiteCenter = whiteCenter
+        lastWhiteSample = now
 
-        if whiteCenter < (redCenter - tolerance) then
-            if not isSpacePressed then
-                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
-                isSpacePressed = true
-            end
-        elseif whiteCenter > (redCenter + tolerance) then
-            if isSpacePressed then
-                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-                isSpacePressed = false
-            end
+        local predictedWhite = whiteCenter + (whiteVelocity * 0.08)
+        local redWidth = math.max(red.AbsoluteSize.X, 1)
+        local tolerance = math.clamp(redWidth * 0.18, 5, 16)
+        local error = redCenter - predictedWhite
+
+        if error > tolerance then
+            setSpacePressed(true)
+        elseif error < -tolerance then
+            setSpacePressed(false)
+        elseif math.abs(whiteVelocity) > 180 then
+            setSpacePressed(whiteVelocity < 0)
         end
 
     else
         -- Minigame tidak aktif
         minigameJustStarted = false
-        if isSpacePressed then
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-            isSpacePressed = false
-        end
+        setSpacePressed(false, true)
+        lastWhiteCenter = nil
+        whiteVelocity = 0
 
         if fishingState == "MINIGAME" then
             fishingState = "COOLDOWN"
@@ -417,8 +609,7 @@ btnFish.MouseButton1Click:Connect(function()
         statusLabel.Text = "Status: OFF"
 
         if isSpacePressed then
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-            isSpacePressed = false
+            setSpacePressed(false, true)
         end
         pcall(function()
             local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
@@ -461,8 +652,7 @@ btnMine.MouseButton1Click:Connect(function()
         btnFish.BackgroundColor3 = Color3.fromRGB(50, 100, 200)
 
         if isSpacePressed then
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-            isSpacePressed = false
+            setSpacePressed(false, true)
         end
         fishingState = "IDLE"
         statusLabel.Text = "Mine: Aktif..."
