@@ -35,136 +35,146 @@ local MINE_TOOL_NAMES = {"Pickaxe", "Cangkul", "Kapak", "Mining", "Pick", "Hamme
 -- Nama/properti crystal di workspace
 local CRYSTAL_NAMES = {"8sisi", "Crystal", "Kristal", "Gem", "Ore", "Batu"}
 local CRYSTAL_MATERIAL = Enum.Material.Neon -- Material 272 = Neon (sesuai file map)
-local MINE_STOP_DISTANCE = 3.2
+local MINE_STOP_DISTANCE = 2.75
 local MINE_MAX_SCAN_DISTANCE = 260
 local PATH_RETRY_DELAY = 0.35
-local FISH_RECAST_DELAY = 1.15
-local FISH_WAIT_TIMEOUT = 24
+local FISH_RECAST_DELAY = 0.8
+local FISH_WAIT_TIMEOUT = 10
+local FISH_MINIGAME_GRACE = 0.8
 local MINE_SMOOTH_MOVE = true
 local MINE_WALK_SPEED = 15
 
 -- ==========================================
 -- GUI UTAMA
 -- ==========================================
+pcall(function()
+    local oldGui = game:GetService("CoreGui"):FindFirstChild("AllInOne_IH")
+    if oldGui then oldGui:Destroy() end
+end)
+
 local gui = Instance.new("ScreenGui")
 gui.Name = "AllInOne_IH"
 gui.ResetOnSpawn = false
 gui.Parent = game:GetService("CoreGui")
 
 local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0, 260, 0, 278)
-main.Position = UDim2.new(1, -275, 0, 95)
-main.BackgroundColor3 = Color3.fromRGB(18, 22, 28)
+main.Size = UDim2.new(0, 250, 0, 318)
+main.Position = UDim2.new(1, -265, 0, 86)
+main.BackgroundColor3 = Color3.fromRGB(21, 23, 26)
 main.BorderSizePixel = 0
 main.Active = true
 main.Draggable = true
 
 local mainCorner = Instance.new("UICorner", main)
-mainCorner.CornerRadius = UDim.new(0, 10)
+mainCorner.CornerRadius = UDim.new(0, 4)
 
 local mainStroke = Instance.new("UIStroke", main)
-mainStroke.Color = Color3.fromRGB(73, 166, 194)
-mainStroke.Thickness = 1.5
-mainStroke.Transparency = 0.1
+mainStroke.Color = Color3.fromRGB(50, 53, 58)
+mainStroke.Thickness = 1
+mainStroke.Transparency = 0
 
--- Title
 local title = Instance.new("TextLabel", main)
-title.Size = UDim2.new(1, -20, 0, 30)
-title.Position = UDim2.new(0, 10, 0, 8)
-title.BackgroundTransparency = 1
-title.Text = "INDO HANGOUT"
-title.TextColor3 = Color3.new(1, 1, 1)
-title.Font = Enum.Font.GothamBold
+title.Size = UDim2.new(1, 0, 0, 28)
+title.Position = UDim2.new(0, 0, 0, 0)
+title.BackgroundColor3 = Color3.fromRGB(28, 31, 35)
+title.Text = "AUTO FARM PANEL"
+title.TextColor3 = Color3.fromRGB(230, 233, 236)
+title.Font = Enum.Font.GothamSemibold
 title.TextScaled = true
 
--- Status label
 local statusLabel = Instance.new("TextLabel", main)
-statusLabel.Size = UDim2.new(1, -20, 0, 28)
-statusLabel.Position = UDim2.new(0, 10, 0, 43)
-statusLabel.BackgroundColor3 = Color3.fromRGB(28, 34, 43)
+statusLabel.Size = UDim2.new(1, -18, 0, 25)
+statusLabel.Position = UDim2.new(0, 9, 0, 36)
+statusLabel.BackgroundColor3 = Color3.fromRGB(32, 35, 40)
 statusLabel.Text = "Status: OFF"
-statusLabel.TextColor3 = Color3.fromRGB(215, 235, 240)
+statusLabel.TextColor3 = Color3.fromRGB(215, 219, 224)
 statusLabel.Font = Enum.Font.Code
 statusLabel.TextScaled = true
 local statusCorner = Instance.new("UICorner", statusLabel)
-statusCorner.CornerRadius = UDim.new(0, 6)
+statusCorner.CornerRadius = UDim.new(0, 3)
 
--- Tombol FISH
 local btnFish = Instance.new("TextButton", main)
-btnFish.Size = UDim2.new(0.92, 0, 0, 38)
-btnFish.Position = UDim2.new(0.04, 0, 0, 80)
-btnFish.BackgroundColor3 = Color3.fromRGB(41, 104, 170)
-btnFish.Text = "🎣 AUTO FISH: OFF"
-btnFish.Font = Enum.Font.GothamBold
+btnFish.Size = UDim2.new(1, -18, 0, 34)
+btnFish.Position = UDim2.new(0, 9, 0, 72)
+btnFish.BackgroundColor3 = Color3.fromRGB(38, 40, 45)
+btnFish.Text = "Auto Fishing: OFF"
+btnFish.Font = Enum.Font.GothamSemibold
 btnFish.TextScaled = true
-btnFish.TextColor3 = Color3.new(1, 1, 1)
+btnFish.TextColor3 = Color3.fromRGB(236, 238, 240)
 local btnFishCorner = Instance.new("UICorner", btnFish)
-btnFishCorner.CornerRadius = UDim.new(0, 8)
+btnFishCorner.CornerRadius = UDim.new(0, 3)
 
--- Tombol MINE
 local btnMine = Instance.new("TextButton", main)
-btnMine.Size = UDim2.new(0.92, 0, 0, 38)
-btnMine.Position = UDim2.new(0.04, 0, 0, 124)
-btnMine.BackgroundColor3 = Color3.fromRGB(167, 101, 38)
-btnMine.Text = "⛏️ AUTO MINE: OFF"
-btnMine.Font = Enum.Font.GothamBold
+btnMine.Size = UDim2.new(1, -18, 0, 34)
+btnMine.Position = UDim2.new(0, 9, 0, 112)
+btnMine.BackgroundColor3 = Color3.fromRGB(38, 40, 45)
+btnMine.Text = "Auto Mining: OFF"
+btnMine.Font = Enum.Font.GothamSemibold
 btnMine.TextScaled = true
-btnMine.TextColor3 = Color3.new(1, 1, 1)
+btnMine.TextColor3 = Color3.fromRGB(236, 238, 240)
 local btnMineCorner = Instance.new("UICorner", btnMine)
-btnMineCorner.CornerRadius = UDim.new(0, 8)
+btnMineCorner.CornerRadius = UDim.new(0, 3)
 
 local settingsTitle = Instance.new("TextLabel", main)
-settingsTitle.Size = UDim2.new(1, -20, 0, 22)
-settingsTitle.Position = UDim2.new(0, 10, 0, 170)
+settingsTitle.Size = UDim2.new(1, -18, 0, 21)
+settingsTitle.Position = UDim2.new(0, 9, 0, 154)
 settingsTitle.BackgroundTransparency = 1
-settingsTitle.Text = "SETTINGS"
-settingsTitle.TextColor3 = Color3.fromRGB(130, 180, 195)
-settingsTitle.Font = Enum.Font.GothamBold
+settingsTitle.Text = "Settings"
+settingsTitle.TextColor3 = Color3.fromRGB(170, 175, 182)
+settingsTitle.Font = Enum.Font.GothamSemibold
 settingsTitle.TextScaled = true
 
 local btnSmooth = Instance.new("TextButton", main)
-btnSmooth.Size = UDim2.new(0.44, 0, 0, 32)
-btnSmooth.Position = UDim2.new(0.04, 0, 0, 198)
-btnSmooth.BackgroundColor3 = Color3.fromRGB(35, 132, 92)
-btnSmooth.Text = "Smooth Mine: ON"
+btnSmooth.Size = UDim2.new(0.47, -4, 0, 30)
+btnSmooth.Position = UDim2.new(0, 9, 0, 181)
+btnSmooth.BackgroundColor3 = Color3.fromRGB(42, 92, 71)
+btnSmooth.Text = "Smooth: ON"
 btnSmooth.Font = Enum.Font.GothamSemibold
 btnSmooth.TextScaled = true
-btnSmooth.TextColor3 = Color3.new(1, 1, 1)
+btnSmooth.TextColor3 = Color3.fromRGB(235, 238, 240)
 local btnSmoothCorner = Instance.new("UICorner", btnSmooth)
-btnSmoothCorner.CornerRadius = UDim.new(0, 7)
-
-local btnFishWait = Instance.new("TextButton", main)
-btnFishWait.Size = UDim2.new(0.44, 0, 0, 32)
-btnFishWait.Position = UDim2.new(0.52, 0, 0, 198)
-btnFishWait.BackgroundColor3 = Color3.fromRGB(58, 76, 112)
-btnFishWait.Text = "Wait: 24s"
-btnFishWait.Font = Enum.Font.GothamSemibold
-btnFishWait.TextScaled = true
-btnFishWait.TextColor3 = Color3.new(1, 1, 1)
-local btnFishWaitCorner = Instance.new("UICorner", btnFishWait)
-btnFishWaitCorner.CornerRadius = UDim.new(0, 7)
+btnSmoothCorner.CornerRadius = UDim.new(0, 3)
 
 local btnSpeed = Instance.new("TextButton", main)
-btnSpeed.Size = UDim2.new(0.44, 0, 0, 32)
-btnSpeed.Position = UDim2.new(0.04, 0, 0, 236)
-btnSpeed.BackgroundColor3 = Color3.fromRGB(69, 86, 59)
+btnSpeed.Size = UDim2.new(0.47, -4, 0, 30)
+btnSpeed.Position = UDim2.new(0.53, -5, 0, 181)
+btnSpeed.BackgroundColor3 = Color3.fromRGB(48, 55, 43)
 btnSpeed.Text = "Speed: 15"
 btnSpeed.Font = Enum.Font.GothamSemibold
 btnSpeed.TextScaled = true
-btnSpeed.TextColor3 = Color3.new(1, 1, 1)
+btnSpeed.TextColor3 = Color3.fromRGB(235, 238, 240)
 local btnSpeedCorner = Instance.new("UICorner", btnSpeed)
-btnSpeedCorner.CornerRadius = UDim.new(0, 7)
+btnSpeedCorner.CornerRadius = UDim.new(0, 3)
 
-local btnRecast = Instance.new("TextButton", main)
-btnRecast.Size = UDim2.new(0.44, 0, 0, 32)
-btnRecast.Position = UDim2.new(0.52, 0, 0, 236)
-btnRecast.BackgroundColor3 = Color3.fromRGB(90, 66, 112)
-btnRecast.Text = "Recast: 1.2s"
-btnRecast.Font = Enum.Font.GothamSemibold
-btnRecast.TextScaled = true
-btnRecast.TextColor3 = Color3.new(1, 1, 1)
-local btnRecastCorner = Instance.new("UICorner", btnRecast)
-btnRecastCorner.CornerRadius = UDim.new(0, 7)
+local function makeSettingBox(labelText, yPos, defaultText)
+    local label = Instance.new("TextLabel", main)
+    label.Size = UDim2.new(0.52, -12, 0, 25)
+    label.Position = UDim2.new(0, 10, 0, yPos)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    label.TextColor3 = Color3.fromRGB(190, 195, 200)
+    label.Font = Enum.Font.Gotham
+    label.TextScaled = true
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local box = Instance.new("TextBox", main)
+    box.Size = UDim2.new(0.42, 0, 0, 25)
+    box.Position = UDim2.new(0.56, 0, 0, yPos)
+    box.BackgroundColor3 = Color3.fromRGB(31, 34, 39)
+    box.TextColor3 = Color3.fromRGB(235, 238, 240)
+    box.PlaceholderColor3 = Color3.fromRGB(130, 134, 140)
+    box.Text = defaultText
+    box.ClearTextOnFocus = false
+    box.Font = Enum.Font.Code
+    box.TextScaled = true
+    local corner = Instance.new("UICorner", box)
+    corner.CornerRadius = UDim.new(0, 3)
+    return box
+end
+
+local waitBox = makeSettingBox("Bite wait", 222, tostring(FISH_WAIT_TIMEOUT))
+local recastBox = makeSettingBox("Recast", 252, string.format("%.1f", FISH_RECAST_DELAY))
+local rangeBox = makeSettingBox("Mine range", 282, string.format("%.1f", MINE_STOP_DISTANCE))
 
 -- ==========================================
 -- HELPER: CARI TOOL DI BACKPACK/CHAR
@@ -261,6 +271,9 @@ end
 local function getFishingElements()
     local playerGui = player:FindFirstChild("PlayerGui")
     if not playerGui then return nil, nil end
+    local fallbackWhite = nil
+    local fallbackRed = nil
+
     for _, v in pairs(playerGui:GetDescendants()) do
         local lowerName = v.Name:lower()
         if (lowerName == "whitebar" or lowerName:find("white")) and v:IsA("GuiObject") then
@@ -278,8 +291,27 @@ local function getFishingElements()
                 return v, red
             end
         end
+
+        if v:IsA("GuiObject") and v.Visible and v.AbsoluteSize.X > 8 and v.AbsoluteSize.Y > 4 then
+            local c = v.BackgroundColor3
+            if not fallbackWhite and c.R > 0.82 and c.G > 0.82 and c.B > 0.82 then
+                local parent = v.Parent
+                if parent then
+                    for _, sibling in ipairs(parent:GetChildren()) do
+                        if sibling:IsA("GuiObject") and sibling.Visible and sibling.AbsoluteSize.X > 8 then
+                            local sc = sibling.BackgroundColor3
+                            if sc.R > 0.55 and sc.G < 0.25 and sc.B < 0.25 then
+                                fallbackWhite = v
+                                fallbackRed = sibling
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end
-    return nil, nil
+    return fallbackWhite, fallbackRed
 end
 
 local function setSpacePressed(pressed, force)
@@ -323,6 +355,69 @@ local function isLikelyCrystal(obj)
     return score >= 4, score
 end
 
+local function belongsToOtherPlayer(obj)
+    local cursor = obj
+    while cursor and cursor ~= workspace do
+        for _, key in ipairs({"Owner", "owner", "OwnerName", "ownerName", "UserId", "userId", "Player", "player"}) do
+            local value = cursor:GetAttribute(key)
+            if value ~= nil then
+                if typeof(value) == "number" and value ~= player.UserId then
+                    return true
+                end
+                if typeof(value) == "string" and value ~= "" and value ~= player.Name and value ~= player.DisplayName and value ~= tostring(player.UserId) then
+                    return true
+                end
+            end
+        end
+
+        for _, childName in ipairs({"Owner", "OwnerName", "PlayerName", "UserId"}) do
+            local child = cursor:FindFirstChild(childName)
+            if child and child:IsA("ValueBase") then
+                local value = child.Value
+                if typeof(value) == "number" and value ~= player.UserId then
+                    return true
+                end
+                if typeof(value) == "string" and value ~= "" and value ~= player.Name and value ~= player.DisplayName and value ~= tostring(player.UserId) then
+                    return true
+                end
+                if typeof(value) == "Instance" and value:IsA("Player") and value ~= player then
+                    return true
+                end
+            end
+        end
+
+        cursor = cursor.Parent
+    end
+
+    local root = obj.Parent or obj
+    for _, desc in ipairs(root:GetDescendants()) do
+        if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+            local text = desc.Text or ""
+            if text ~= "" and not text:lower():find(player.Name:lower()) and not text:lower():find(player.DisplayName:lower()) then
+                for _, other in ipairs(Players:GetPlayers()) do
+                    if other ~= player then
+                        local name = other.Name:lower()
+                        local display = other.DisplayName:lower()
+                        local lowerText = text:lower()
+                        if lowerText:find(name) or lowerText:find(display) then
+                            return true
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    for _, other in ipairs(Players:GetPlayers()) do
+        if other ~= player and other.Character and other.Character.PrimaryPart then
+            if (other.Character.PrimaryPart.Position - obj.Position).Magnitude < 9 then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 local function findNearestCrystal()
     local char = player.Character
     if not char or not char.PrimaryPart then return nil end
@@ -333,7 +428,7 @@ local function findNearestCrystal()
 
     for _, obj in pairs(workspace:GetDescendants()) do
         local ok, score = isLikelyCrystal(obj)
-        if ok then
+        if ok and not belongsToOtherPlayer(obj) then
             local dist = (obj.Position - myPos).Magnitude
             if dist < MINE_MAX_SCAN_DISTANCE then
                 local value = dist - (score * 10)
@@ -371,7 +466,7 @@ local function getMiningStandPoint(crystal)
 
     local origin = crystal.Position
     local crystalWidth = math.max(crystal.Size.X, crystal.Size.Z)
-    local radius = math.clamp((crystalWidth * 0.32) + 2.15, MINE_STOP_DISTANCE, 4.6)
+    local radius = math.clamp((crystalWidth * 0.28) + 1.9, MINE_STOP_DISTANCE, 4.2)
     local ignore = {char, crystal}
     local bestPos = nil
     local bestScore = math.huge
@@ -469,7 +564,7 @@ local function moveToPosition(hum, targetPos, targetPart)
             if (currentPos - waypoint.Position).Magnitude <= waypointReach then
                 break
             end
-            if (currentPos - targetPos).Magnitude <= 2.6 then
+            if (currentPos - targetPos).Magnitude <= 2.1 then
                 hum.WalkSpeed = originalWalkSpeed
                 return true
             end
@@ -495,7 +590,7 @@ local function moveToPosition(hum, targetPos, targetPart)
     end
 
     hum.WalkSpeed = originalWalkSpeed
-    return char.PrimaryPart and (char.PrimaryPart.Position - targetPos).Magnitude <= 3
+    return char.PrimaryPart and (char.PrimaryPart.Position - targetPos).Magnitude <= 2.4
 end
 
 local function facePart(part)
@@ -543,7 +638,7 @@ local function mineRoutine()
 
         -- Jalan ke titik samping crystal, bukan ke pusatnya, agar tidak naik ke atas batu.
         local standPoint = getMiningStandPoint(crystal)
-        if standPoint and (char.PrimaryPart.Position - standPoint).Magnitude > 2.4 then
+        if standPoint and (char.PrimaryPart.Position - standPoint).Magnitude > 2.0 then
             warn("[MINE] Pathfinding ke sisi crystal...")
             local arrived = moveToPosition(hum, standPoint, crystal)
             if not arrived then
@@ -612,6 +707,7 @@ RunService.Heartbeat:Connect(function()
             -- Reset paksa Space di awal minigame
             setSpacePressed(false, true)
             lastWhiteCenter = nil
+            lastWhiteSample = os.clock()
             whiteVelocity = 0
             fishingState = "MINIGAME"
             statusLabel.Text = "Fish: Minigame!"
@@ -644,7 +740,7 @@ RunService.Heartbeat:Connect(function()
 
     else
         -- Minigame tidak aktif
-        if fishingState == "MINIGAME" and os.clock() - lastMinigameGuiSeen < 0.25 then
+        if fishingState == "MINIGAME" and os.clock() - lastMinigameGuiSeen < FISH_MINIGAME_GRACE then
             return
         end
         minigameJustStarted = false
@@ -716,19 +812,8 @@ end)
 -- ==========================================
 btnSmooth.MouseButton1Click:Connect(function()
     MINE_SMOOTH_MOVE = not MINE_SMOOTH_MOVE
-    btnSmooth.Text = MINE_SMOOTH_MOVE and "Smooth Mine: ON" or "Smooth Mine: OFF"
-    btnSmooth.BackgroundColor3 = MINE_SMOOTH_MOVE and Color3.fromRGB(35, 132, 92) or Color3.fromRGB(92, 75, 75)
-end)
-
-btnFishWait.MouseButton1Click:Connect(function()
-    if FISH_WAIT_TIMEOUT == 24 then
-        FISH_WAIT_TIMEOUT = 30
-    elseif FISH_WAIT_TIMEOUT == 30 then
-        FISH_WAIT_TIMEOUT = 18
-    else
-        FISH_WAIT_TIMEOUT = 24
-    end
-    btnFishWait.Text = "Wait: " .. tostring(FISH_WAIT_TIMEOUT) .. "s"
+    btnSmooth.Text = MINE_SMOOTH_MOVE and "Smooth: ON" or "Smooth: OFF"
+    btnSmooth.BackgroundColor3 = MINE_SMOOTH_MOVE and Color3.fromRGB(42, 92, 71) or Color3.fromRGB(80, 58, 58)
 end)
 
 btnSpeed.MouseButton1Click:Connect(function()
@@ -742,15 +827,31 @@ btnSpeed.MouseButton1Click:Connect(function()
     btnSpeed.Text = "Speed: " .. tostring(MINE_WALK_SPEED)
 end)
 
-btnRecast.MouseButton1Click:Connect(function()
-    if FISH_RECAST_DELAY == 1.15 then
-        FISH_RECAST_DELAY = 1.8
-    elseif FISH_RECAST_DELAY == 1.8 then
-        FISH_RECAST_DELAY = 0.9
-    else
-        FISH_RECAST_DELAY = 1.15
+local function readNumberBox(box, fallback, minValue, maxValue, decimals)
+    local value = tonumber(box.Text)
+    if not value then
+        value = fallback
     end
-    btnRecast.Text = "Recast: " .. string.format("%.1f", FISH_RECAST_DELAY) .. "s"
+    value = math.clamp(value, minValue, maxValue)
+    if decimals then
+        box.Text = string.format("%." .. tostring(decimals) .. "f", value)
+    else
+        value = math.floor(value + 0.5)
+        box.Text = tostring(value)
+    end
+    return value
+end
+
+waitBox.FocusLost:Connect(function()
+    FISH_WAIT_TIMEOUT = readNumberBox(waitBox, FISH_WAIT_TIMEOUT, 5, 35, nil)
+end)
+
+recastBox.FocusLost:Connect(function()
+    FISH_RECAST_DELAY = readNumberBox(recastBox, FISH_RECAST_DELAY, 0.4, 5, 1)
+end)
+
+rangeBox.FocusLost:Connect(function()
+    MINE_STOP_DISTANCE = readNumberBox(rangeBox, MINE_STOP_DISTANCE, 2.2, 5.5, 1)
 end)
 
 -- ==========================================
@@ -760,8 +861,8 @@ btnFish.MouseButton1Click:Connect(function()
     if mode == "FISH" then
         -- Matikan fish
         mode = "OFF"
-        btnFish.Text = "🎣 AUTO FISH: OFF"
-        btnFish.BackgroundColor3 = Color3.fromRGB(50, 100, 200)
+        btnFish.Text = "Auto Fishing: OFF"
+        btnFish.BackgroundColor3 = Color3.fromRGB(38, 40, 45)
         fishingState = "IDLE"
         nextCastTime = 0
         lastMinigameGuiSeen = 0
@@ -780,10 +881,10 @@ btnFish.MouseButton1Click:Connect(function()
     else
         -- Nyalakan fish, matikan mine
         mode = "FISH"
-        btnFish.Text = "🎣 AUTO FISH: ON"
-        btnFish.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-        btnMine.Text = "⛏️ AUTO MINE: OFF"
-        btnMine.BackgroundColor3 = Color3.fromRGB(150, 80, 20)
+        btnFish.Text = "Auto Fishing: ON"
+        btnFish.BackgroundColor3 = Color3.fromRGB(42, 92, 71)
+        btnMine.Text = "Auto Mining: OFF"
+        btnMine.BackgroundColor3 = Color3.fromRGB(38, 40, 45)
         fishingState = "IDLE"
         nextCastTime = 0
         lastMinigameGuiSeen = 0
@@ -801,8 +902,8 @@ btnMine.MouseButton1Click:Connect(function()
     if mode == "MINE" then
         -- Matikan mine
         mode = "OFF"
-        btnMine.Text = "⛏️ AUTO MINE: OFF"
-        btnMine.BackgroundColor3 = Color3.fromRGB(150, 80, 20)
+        btnMine.Text = "Auto Mining: OFF"
+        btnMine.BackgroundColor3 = Color3.fromRGB(38, 40, 45)
         statusLabel.Text = "Status: OFF"
 
         pcall(function()
@@ -812,10 +913,10 @@ btnMine.MouseButton1Click:Connect(function()
     else
         -- Nyalakan mine, matikan fish
         mode = "MINE"
-        btnMine.Text = "⛏️ AUTO MINE: ON"
-        btnMine.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-        btnFish.Text = "🎣 AUTO FISH: OFF"
-        btnFish.BackgroundColor3 = Color3.fromRGB(50, 100, 200)
+        btnMine.Text = "Auto Mining: ON"
+        btnMine.BackgroundColor3 = Color3.fromRGB(42, 92, 71)
+        btnFish.Text = "Auto Fishing: OFF"
+        btnFish.BackgroundColor3 = Color3.fromRGB(38, 40, 45)
 
         if isSpacePressed then
             setSpacePressed(false, true)
