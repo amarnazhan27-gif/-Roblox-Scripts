@@ -18,6 +18,8 @@ local isSpacePressed = false
 local fishingState = "IDLE"
 local lastCastTime = 0
 local lastMinigameTime = 0
+local nextCastTime = 0
+local lastMinigameGuiSeen = 0
 local isCasting = false
 local minigameJustStarted = false
 local miningActive = false
@@ -33,9 +35,11 @@ local MINE_TOOL_NAMES = {"Pickaxe", "Cangkul", "Kapak", "Mining", "Pick", "Hamme
 -- Nama/properti crystal di workspace
 local CRYSTAL_NAMES = {"8sisi", "Crystal", "Kristal", "Gem", "Ore", "Batu"}
 local CRYSTAL_MATERIAL = Enum.Material.Neon -- Material 272 = Neon (sesuai file map)
-local MINE_STOP_DISTANCE = 6.5
+local MINE_STOP_DISTANCE = 3.2
 local MINE_MAX_SCAN_DISTANCE = 260
 local PATH_RETRY_DELAY = 0.35
+local FISH_RECAST_DELAY = 0.75
+local FISH_WAIT_TIMEOUT = 14
 
 -- ==========================================
 -- GUI UTAMA
@@ -158,20 +162,27 @@ local function castRod()
         local cam = workspace.CurrentCamera
         if not cam then return end
         local screenCenter = cam.ViewportSize / 2
-        warn("[FISH] Casting...")
+        fishingState = "CASTING"
+        statusLabel.Text = "Fish: Melempar umpan..."
+        warn("[FISH] Melempar umpan...")
         local tool = player.Character and player.Character:FindFirstChildWhichIsA("Tool")
         if tool then
             pcall(function() tool:Activate() end)
         end
         VirtualUser:Button1Down(screenCenter, cam.CFrame)
-        task.wait(2.15)
+        task.wait(1.65)
         VirtualUser:Button1Up(screenCenter, cam.CFrame)
         if tool then
             pcall(function() tool:Deactivate() end)
         end
-        warn("[FISH] Umpan dilempar!")
+        lastCastTime = os.clock()
+        if mode == "FISH" and fishingState == "CASTING" then
+            fishingState = "WAITING"
+            statusLabel.Text = "Fish: Menunggu gigitan..."
+        end
+        warn("[FISH] Umpan dilempar, menunggu gigitan...")
     end)
-    task.wait(1.4)
+    task.wait(0.35)
     isCasting = false
 end
 
@@ -290,7 +301,8 @@ local function getMiningStandPoint(crystal)
     if not char or not char.PrimaryPart then return nil end
 
     local origin = crystal.Position
-    local radius = math.max(MINE_STOP_DISTANCE, math.max(crystal.Size.X, crystal.Size.Z) * 0.5 + 4)
+    local crystalWidth = math.max(crystal.Size.X, crystal.Size.Z)
+    local radius = math.clamp((crystalWidth * 0.32) + 2.15, MINE_STOP_DISTANCE, 4.6)
     local ignore = {char, crystal}
     local bestPos = nil
     local bestScore = math.huge
@@ -304,9 +316,10 @@ local function getMiningStandPoint(crystal)
             local pos = ground.Position + Vector3.new(0, 3, 0)
             local heightDelta = math.abs(pos.Y - char.PrimaryPart.Position.Y)
             local crystalHeightDelta = pos.Y - origin.Y
-            if heightDelta < 18 and crystalHeightDelta < 8 then
+            if heightDelta < 10 and crystalHeightDelta < 4.5 then
                 local clearance = hasClearLine(pos + Vector3.new(0, 2, 0), origin, ignore)
-                local score = (pos - char.PrimaryPart.Position).Magnitude + (clearance and 0 or 35) + heightDelta
+                local distToCrystal = (Vector3.new(pos.X, origin.Y, pos.Z) - origin).Magnitude
+                local score = (pos - char.PrimaryPart.Position).Magnitude + math.abs(distToCrystal - radius) * 4 + (clearance and 0 or 12) + heightDelta
                 if score < bestScore then
                     bestScore = score
                     bestPos = pos
@@ -330,11 +343,11 @@ local function moveToPosition(hum, targetPos, targetPart)
     if not char or not char.PrimaryPart then return false end
 
     local path = PathfindingService:CreatePath({
-        AgentRadius = 2.6,
+        AgentRadius = 1.9,
         AgentHeight = 5.2,
         AgentCanJump = true,
         AgentCanClimb = true,
-        WaypointSpacing = 4,
+        WaypointSpacing = 3,
         Costs = {
             Water = 5,
         },
@@ -367,10 +380,10 @@ local function moveToPosition(hum, targetPos, targetPart)
             task.wait(0.15)
             if not char.PrimaryPart then return false end
             local currentPos = char.PrimaryPart.Position
-            if (currentPos - waypoint.Position).Magnitude <= 3.3 then
+            if (currentPos - waypoint.Position).Magnitude <= 2.4 then
                 break
             end
-            if (currentPos - targetPos).Magnitude <= 3.8 then
+            if (currentPos - targetPos).Magnitude <= 2.6 then
                 return true
             end
 
@@ -393,7 +406,7 @@ local function moveToPosition(hum, targetPos, targetPart)
         end
     end
 
-    return char.PrimaryPart and (char.PrimaryPart.Position - targetPos).Magnitude <= 5
+    return char.PrimaryPart and (char.PrimaryPart.Position - targetPos).Magnitude <= 3
 end
 
 local function facePart(part)
@@ -441,7 +454,7 @@ local function mineRoutine()
 
         -- Jalan ke titik samping crystal, bukan ke pusatnya, agar tidak naik ke atas batu.
         local standPoint = getMiningStandPoint(crystal)
-        if standPoint and (char.PrimaryPart.Position - standPoint).Magnitude > 4 then
+        if standPoint and (char.PrimaryPart.Position - standPoint).Magnitude > 2.4 then
             warn("[MINE] Pathfinding ke sisi crystal...")
             local arrived = moveToPosition(hum, standPoint, crystal)
             if not arrived then
@@ -503,6 +516,7 @@ RunService.Heartbeat:Connect(function()
     local white, red = getFishingElements()
 
     if white and red and white.Visible then
+        lastMinigameGuiSeen = os.clock()
         -- Minigame aktif
         if not minigameJustStarted then
             minigameJustStarted = true
@@ -541,6 +555,9 @@ RunService.Heartbeat:Connect(function()
 
     else
         -- Minigame tidak aktif
+        if fishingState == "MINIGAME" and os.clock() - lastMinigameGuiSeen < 0.25 then
+            return
+        end
         minigameJustStarted = false
         setSpacePressed(false, true)
         lastWhiteCenter = nil
@@ -548,12 +565,14 @@ RunService.Heartbeat:Connect(function()
 
         if fishingState == "MINIGAME" then
             fishingState = "COOLDOWN"
-            lastMinigameTime = os.time()
+            lastMinigameTime = os.clock()
+            nextCastTime = os.clock() + FISH_RECAST_DELAY
+            statusLabel.Text = "Fish: Ikan didapat, siap ulang..."
             warn("[FISH] Minigame selesai!")
         elseif fishingState == "COOLDOWN" then
-            if os.time() - lastMinigameTime >= 1 then
+            if os.clock() - lastMinigameTime >= FISH_RECAST_DELAY then
                 fishingState = "IDLE"
-                statusLabel.Text = "Fish: Siap cast..."
+                statusLabel.Text = "Fish: Siap melempar..."
             end
         end
     end
@@ -564,7 +583,7 @@ end)
 -- ==========================================
 task.spawn(function()
     while true do
-        task.wait(0.5)
+        task.wait(0.2)
         if mode ~= "FISH" then continue end
 
         local char = player.Character
@@ -580,14 +599,22 @@ task.spawn(function()
         local tool = equipTool(FISH_TOOL_NAMES)
 
         if tool and not isCasting then
-            if fishingState == "IDLE" or
-               (fishingState == "WAITING" and (os.time() - lastCastTime) >= 20) then
-                fishingState = "WAITING"
-                lastCastTime = os.time()
-                statusLabel.Text = "Fish: Casting..."
+            local now = os.clock()
+            if (fishingState == "IDLE" and now >= nextCastTime) or
+               (fishingState == "WAITING" and (now - lastCastTime) >= FISH_WAIT_TIMEOUT) then
+                if fishingState == "WAITING" then
+                    statusLabel.Text = "Fish: Lempar ulang..."
+                    warn("[FISH] Timeout gigitan, casting ulang")
+                else
+                    statusLabel.Text = "Fish: Siap melempar..."
+                end
                 task.spawn(castRod)
             elseif fishingState == "WAITING" then
                 statusLabel.Text = "Fish: Menunggu gigitan..."
+            elseif fishingState == "CASTING" then
+                statusLabel.Text = "Fish: Melempar umpan..."
+            elseif fishingState == "COOLDOWN" then
+                statusLabel.Text = "Fish: Siap ulang..."
             end
         elseif not tool then
             statusLabel.Text = "Fish: Tidak ada rod!"
@@ -605,6 +632,10 @@ btnFish.MouseButton1Click:Connect(function()
         btnFish.Text = "🎣 AUTO FISH: OFF"
         btnFish.BackgroundColor3 = Color3.fromRGB(50, 100, 200)
         fishingState = "IDLE"
+        nextCastTime = 0
+        lastMinigameGuiSeen = 0
+        lastWhiteCenter = nil
+        whiteVelocity = 0
         isCasting = false
         statusLabel.Text = "Status: OFF"
 
@@ -623,6 +654,10 @@ btnFish.MouseButton1Click:Connect(function()
         btnMine.Text = "⛏️ AUTO MINE: OFF"
         btnMine.BackgroundColor3 = Color3.fromRGB(150, 80, 20)
         fishingState = "IDLE"
+        nextCastTime = 0
+        lastMinigameGuiSeen = 0
+        lastWhiteCenter = nil
+        whiteVelocity = 0
         statusLabel.Text = "Fish: Aktif..."
         warn("[SYSTEM] Mode FISHING aktif")
     end
@@ -654,7 +689,15 @@ btnMine.MouseButton1Click:Connect(function()
         if isSpacePressed then
             setSpacePressed(false, true)
         end
+        pcall(function()
+            local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+            if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true) end
+        end)
         fishingState = "IDLE"
+        nextCastTime = 0
+        lastMinigameGuiSeen = 0
+        lastWhiteCenter = nil
+        whiteVelocity = 0
         statusLabel.Text = "Mine: Aktif..."
         warn("[SYSTEM] Mode MINING aktif")
 
