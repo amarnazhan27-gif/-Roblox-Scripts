@@ -27,6 +27,11 @@ local lastSpaceToggle = 0
 local lastWhiteCenter = nil
 local lastWhiteSample = os.clock()
 local whiteVelocity = 0
+local cachedWhiteBar = nil
+local cachedRedBar = nil
+local lastGuiScan = 0
+local fishCaughtCount = 0
+local crystalMinedCount = 0
 
 -- Nama tool yang akan dicari (auto-detect fallback)
 local FISH_TOOL_NAMES = {"Fishing Rod", "Rod", "Pancing", "FishingRod"}
@@ -58,7 +63,7 @@ gui.ResetOnSpawn = false
 gui.Parent = game:GetService("CoreGui")
 
 local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0, 250, 0, 318)
+main.Size = UDim2.new(0, 250, 0, 332)
 main.Position = UDim2.new(1, -265, 0, 86)
 main.BackgroundColor3 = Color3.fromRGB(21, 23, 26)
 main.BorderSizePixel = 0
@@ -172,9 +177,36 @@ local function makeSettingBox(labelText, yPos, defaultText)
     return box
 end
 
-local waitBox = makeSettingBox("Bite wait", 222, tostring(FISH_WAIT_TIMEOUT))
-local recastBox = makeSettingBox("Recast", 252, string.format("%.1f", FISH_RECAST_DELAY))
-local rangeBox = makeSettingBox("Mine range", 282, string.format("%.1f", MINE_STOP_DISTANCE))
+local resultFishLabel = Instance.new("TextLabel", main)
+resultFishLabel.Size = UDim2.new(0.47, -4, 0, 24)
+resultFishLabel.Position = UDim2.new(0, 9, 0, 214)
+resultFishLabel.BackgroundColor3 = Color3.fromRGB(31, 34, 39)
+resultFishLabel.Text = "Fish caught: 0"
+resultFishLabel.TextColor3 = Color3.fromRGB(210, 214, 220)
+resultFishLabel.Font = Enum.Font.Gotham
+resultFishLabel.TextScaled = true
+local resultFishCorner = Instance.new("UICorner", resultFishLabel)
+resultFishCorner.CornerRadius = UDim.new(0, 3)
+
+local resultMineLabel = Instance.new("TextLabel", main)
+resultMineLabel.Size = UDim2.new(0.47, -4, 0, 24)
+resultMineLabel.Position = UDim2.new(0.53, -5, 0, 214)
+resultMineLabel.BackgroundColor3 = Color3.fromRGB(31, 34, 39)
+resultMineLabel.Text = "Crystal mined: 0"
+resultMineLabel.TextColor3 = Color3.fromRGB(210, 214, 220)
+resultMineLabel.Font = Enum.Font.Gotham
+resultMineLabel.TextScaled = true
+local resultMineCorner = Instance.new("UICorner", resultMineLabel)
+resultMineCorner.CornerRadius = UDim.new(0, 3)
+
+local waitBox = makeSettingBox("Bite wait", 244, tostring(FISH_WAIT_TIMEOUT))
+local recastBox = makeSettingBox("Recast", 272, string.format("%.1f", FISH_RECAST_DELAY))
+local rangeBox = makeSettingBox("Mine range", 300, string.format("%.1f", MINE_STOP_DISTANCE))
+
+local function updateResultLabels()
+    resultFishLabel.Text = "Fish caught: " .. tostring(fishCaughtCount)
+    resultMineLabel.Text = "Crystal mined: " .. tostring(crystalMinedCount)
+end
 
 -- ==========================================
 -- HELPER: CARI TOOL DI BACKPACK/CHAR
@@ -269,6 +301,16 @@ end
 -- FISHING: PELACAK BAR MINIGAME
 -- ==========================================
 local function getFishingElements()
+    if cachedWhiteBar and cachedRedBar and cachedWhiteBar.Parent and cachedRedBar.Parent and cachedWhiteBar.Visible and cachedRedBar.Visible then
+        return cachedWhiteBar, cachedRedBar
+    end
+
+    local now = os.clock()
+    if now - lastGuiScan < 0.2 then
+        return nil, nil
+    end
+    lastGuiScan = now
+
     local playerGui = player:FindFirstChild("PlayerGui")
     if not playerGui then return nil, nil end
     local fallbackWhite = nil
@@ -288,6 +330,8 @@ local function getFishingElements()
                 end
             end
             if red and red:IsA("GuiObject") then
+                cachedWhiteBar = v
+                cachedRedBar = red
                 return v, red
             end
         end
@@ -311,6 +355,8 @@ local function getFishingElements()
             end
         end
     end
+    cachedWhiteBar = fallbackWhite
+    cachedRedBar = fallbackRed
     return fallbackWhite, fallbackRed
 end
 
@@ -408,13 +454,6 @@ local function belongsToOtherPlayer(obj)
         end
     end
 
-    for _, other in ipairs(Players:GetPlayers()) do
-        if other ~= player and other.Character and other.Character.PrimaryPart then
-            if (other.Character.PrimaryPart.Position - obj.Position).Magnitude < 9 then
-                return true
-            end
-        end
-    end
     return false
 end
 
@@ -655,9 +694,13 @@ local function mineRoutine()
             local screenPos, onScreen = cam:WorldToScreenPoint(aimPos)
             if onScreen then
                 warn("[MINE] Menambang crystal...")
+                local minedThisTarget = false
                 for i = 1, 7 do
                     if mode ~= "MINE" then break end
-                    if crystal.Parent == nil then break end
+                    if crystal.Parent == nil then
+                        minedThisTarget = true
+                        break
+                    end
                     facePart(crystal)
                     -- Klik di posisi crystal di layar
                     VirtualUser:Button1Down(
@@ -671,6 +714,11 @@ local function mineRoutine()
                     )
                     task.wait(0.3)
                     pcall(function() tool:Activate() end)
+                end
+                if minedThisTarget or crystal.Parent == nil then
+                    crystalMinedCount = crystalMinedCount + 1
+                    updateResultLabels()
+                    statusLabel.Text = "Mining: Crystal mined"
                 end
             else
                 -- Crystal tidak terlihat di layar, coba activate tool
@@ -752,6 +800,8 @@ RunService.Heartbeat:Connect(function()
             fishingState = "COOLDOWN"
             lastMinigameTime = os.clock()
             nextCastTime = os.clock() + FISH_RECAST_DELAY
+            fishCaughtCount = fishCaughtCount + 1
+            updateResultLabels()
             statusLabel.Text = "Fish: Ikan didapat, siap ulang..."
             warn("[FISH] Minigame selesai!")
         elseif fishingState == "COOLDOWN" then
